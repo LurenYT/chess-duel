@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" aria-label="wk">
+<defs>
+  <linearGradient id="body" x1="0.15" x2="0.92" y1="0" y2="1">
+    <stop offset="0" stop-color="#fffef2"/><stop offset="1" stop-color="#d9d9c1"/>
+  </linearGradient>
+</defs>
+<g fill="url(#body)" stroke="#334438" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round">
+
+<path d="M46 10 H54 V20 H64 V28 H54 V40 H46 V28 H36 V20 H46Z"/>
+<path d="M38 40 H62 Q69 43 69 51 L64 65 H36 L31 51 Q31 43 38 40Z"/>
+<path d="M29 42 L35 51 L44 44 L50 54 L56 44 L65 51 L71 42"/>
+<path d="M34 64 H66 L72 74 H28Z"/>
+<path d="M22 74 H78 L82 82 H18Z"/>
+<path class="detail" d="M39 61 H61 M30 77 H70"/>
+</g>
+<style>.detail{fill:none;stroke:#a5b5a0;stroke-width:2.8}.eye{fill:#263a30;stroke:#334438;stroke-width:1.2}.snout{fill:#f1aeaa;stroke:#334438;stroke-width:2.6}.nostril{fill:#9c5f68;stroke:none}</style>
+</svg>

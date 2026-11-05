@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111915">
+  <meta name="description" content="CHESS DUEL: шахматы 10 на 10 со свиньями, UNO, ракетами и магией пешек (5% шанс превращения), перетаскиванием фигур и игрой онлайн 1 на 1.">
+  <title>CHESS DUEL — шахматы с друзьями</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/socket.io/socket.io.js" defer></script>
+  <script src="/chess10.js" defer></script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="site-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="CHESS DUEL, главная">
+        <div class="brand-mark">♞</div>
+        <div><strong>CHESS<span>DUEL</span></strong><small>КЛУБ ШАХМАТ</small></div>
+      </a>
+
+      <div class="sidebar-section">
+        <div class="section-eyebrow">ИГРАЙ КАК ТЕБЕ УДОБНО</div>
+        <button class="nav-button active" id="localBtn" type="button">
+          <span class="nav-icon">♟</span><span>На одном устройстве</span><span class="nav-chevron">›</span>
+        </button>
+        <button class="nav-button" id="createBtn" type="button">
+          <span class="nav-icon">✦</span><span>Создать онлайн-комнату</span><span class="nav-chevron">›</span>
+        </button>
+      </div>
+
+      <div class="sidebar-section join-section">
+        <label class="section-eyebrow" for="roomCode">ЕСТЬ КОД ПРИГЛАШЕНИЯ?</label>
+        <div class="join-field">
+          <input id="roomCode" maxlength="6" placeholder="НАПР. ABC123" autocomplete="off" spellcheck="false" aria-label="Код комнаты">
+          <button id="joinBtn" type="button" aria-label="Войти в комнату" title="Присоединиться">→</button>
+        </div>
+      </div>
+
+      <div class="sidebar-section player-name-section">
+        <label class="section-eyebrow" for="playerName">ВАШЕ ИМЯ В ИГРЕ</label>
+        <input class="name-input" id="playerName" maxlength="18" placeholder="Ваш никнейм" value="Игрок" autocomplete="nickname">
+      </div>
+
+      <div class="sidebar-promo">
+        <div class="promo-symbol">♛</div>
+        <div class="promo-topline">ШАХМАТЫ БЕЗ ГРАНИЦ</div>
+        <strong>Один ход может изменить всё.</strong>
+        <p>Брось вызов другу — просто отправь ему ссылку.</p>
+        <button id="promoCreateBtn" type="button">Создать матч <span>↗</span></button>
+      </div>
+      <div class="sidebar-bottom"><span class="live-dot"></span> REAL-TIME MULTIPLAYER <span class="sidebar-version">v8.0</span></div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumb">ГЛАВНАЯ <span>/</span> <strong>ИГРОВАЯ</strong></div>
+        <div class="header-controls"><div class="music-toolbar"><button type="button" id="musicBtn" title="Включить или выключить музыку" aria-pressed="true">♫ Музыка</button><label for="musicVolume">Громкость <input id="musicVolume" type="range" min="0" max="100" value="22" step="1" aria-label="Громкость музыки"></label></div><button id="soundBtn" class="sound-toggle" type="button" aria-pressed="true">🔊 Звук включён</button><div class="top-status"><span class="live-dot"></span><span id="connectionLabel">Локальная игра</span></div></div>
+      </header>
+
+      <section class="page-heading">
+        <div>
+          <div class="kicker"><span class="kicker-bar"></span> YOUR NEXT MOVE</div>
+          <h1>CHESS DUEL 8.0 <em>Rocket Edition</em></h1>
+          <p>Ящики каждые 30 ходов, лавка k6 после 50-го, бриллиантовые комбинации и кинематографические повторы после матча. 🎶 Музыка включается после первого хода.</p>
+        </div>
+        <div class="heading-deco" aria-hidden="true">♞</div>
+      </section>
+
+      <div class="game-layout">
+        <section class="board-section" aria-label="Шахматная партия">
+          <div class="game-topline">
+            <div class="game-mode"><span class="game-mode-dot"></span> <span id="gameModeLabel">ЛОКАЛЬНАЯ ПАРТИЯ</span></div>
+            <div class="room-pill" id="roomPill">10×10 <span>·</span> свиньи</div>
+          </div>
+
+          <div class="opponent-card" id="topPlayerCard">
+            <div class="avatar dark-avatar" id="topAvatar">♚</div>
+            <div class="player-info"><strong id="topPlayerName">Чёрные фигуры</strong><span id="topPlayerStatus">Локальный игрок</span></div>
+            <div class="clock" id="topClock">10:00</div>
+          </div>
+
+          <div class="board-and-shop"><div class="board-frame" id="boardFrame"><div id="board" class="chess-board" role="grid" aria-label="Шахматная доска 10 на 10"></div></div><button id="shopTile" class="shop-tile" type="button" title="Лавка k6 снаружи, напротив середины правого края доски"><span class="shop-graphic"><img src="/items/merchant.svg" alt="Лавка"></span><span id="shopVisitorArt" aria-hidden="true"></span><span id="shopTileLabel">ЛАВКА<br>50-й ход</span></button></div>
+
+          <div class="opponent-card own-card" id="bottomPlayerCard">
+            <div class="avatar light-avatar" id="bottomAvatar">♔</div>
+            <div class="player-info"><strong id="bottomPlayerName">Белые фигуры</strong><span id="bottomPlayerStatus">Ваш ход</span></div>
+            <div class="clock" id="bottomClock">10:00</div>
+          </div>
+
+          <div class="board-footnote"><span>✦</span> 🎁 Ящик через каждые 30 полуходов, собери фигурой! 🏪 Лавка k6 у середины поля: приведи любую фигуру на j5, j6 или j7 и обменяй 3 на 1. ✨ Пешки могут временно превращаться. <span id="orientationLabel">Белые снизу</span></div>
+        </section>
+
+        <aside class="match-panel">
+          <div class="panel-header">
+            <div><div class="section-eyebrow">MATCH CENTER</div><h2>Текущая партия</h2></div>
+            <div class="panel-icon">↗</div>
+          </div>
+
+          <div class="status-card" id="statusCard">
+            <div class="status-tag" id="statusTag">ИГРА ИДЁТ</div>
+            <div class="status-main"><span class="status-symbol" id="statusSymbol">◉</span><strong id="statusText">Ход белых</strong></div>
+            <p id="statusDescription">Сделайте первый ход, чтобы начать партию.</p>
+          </div>
+
+          <div class="invite-block" id="inviteBlock" hidden>
+            <div class="section-eyebrow">ПРИГЛАСИ СОПЕРНИКА</div>
+            <div class="room-display"><span id="activeRoomCode">———</span><button type="button" id="copyCodeBtn" title="Скопировать код"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button></div>
+            <button class="share-button" type="button" id="copyLinkBtn">✧ <span>Копировать ссылку-приглашение</span> ↗</button>
+          </div>
+
+          <div class="moves-heading"><h3>История ходов</h3><span id="moveCounter">0 ХОДОВ</span></div>
+          <div class="moves-area" id="movesArea"><div class="empty-moves"><span>♙</span><p>Здесь появятся ходы<br>вашей партии</p></div></div>
+
+          <div class="crate-panel"><div class="crate-panel-title"><span>🎁 СЛУЧАЙНЫЙ ЯЩИК</span><strong id="crateCountdown">до 30-го хода</strong></div><p id="crateDescription">Первый ящик появится на 30-м полуходе, дальше — каждые 30. Займи клетку ящика своей фигурой! Шанс получить ракету — 2%.</p><div id="effectsList" class="effects-list"></div><details><summary>Все 5 усилений и 5 помех</summary><div id="effectCatalog"></div></details></div>
+          <div class="merchant-panel"><div class="merchant-title">🏪 ЛАВКА ТОРГОВЦА <span id="shopStatus">закрыта до 50-го</span></div><p>Внешняя клетка <b>k6</b> напротив середины доски: приведи <b>любую свою фигуру, кроме короля</b>, на <b>j5, j6 или j7</b> и перетащи её на лавку (или выбери фигуру и нажми лавку). Посетитель сразу подсветится и войдёт в тройку оплаты. Выбери ещё две фигуры. После первой сделки лавка закроется.</p><div id="priceLegend">♟ 1 · ♞ 3 · ♝ 3 · ♜ 5 · 🐷 6 · 🃏 6 · ♛ 9 · 🚀 12</div></div>
+          <div class="diamond-panel"><div class="diamond-panel-title">💎 РЕДКИЕ БРИЛЛИАНТОВЫЕ ХОДЫ</div><p>После каждого обычного хода движок сравнивает легальные варианты на три полухода вперёд с позиционной оценкой, ответами соперника и тактической фильтрацией. Выдающиеся лучшие тактические решения подсвечиваются голубым и сопровождаются особой фанфарой. Оценка приблизительная: это авторские шахматы 10×10 со случайными правилами.</p></div>
+          <div class="rocket-panel"><div class="rocket-panel-title">🚀 РАКЕТА · 12 ОЧКОВ</div><p>Редкая добыча из ящика (2%) или покупка у торговца за 12 очков. Появляется на первой свободной клетке своей половины. Ходит на соседнюю клетку либо взлетает на 3 клетки прямо вперёд. При посадке уничтожает фигуры на 8 соседних клетках, включая свои. Если рядом король — взлёт невозможен.</p><div class="rocket-visual"><img src="/pieces/wt.svg" alt="Белая ракета"><img src="/pieces/bt.svg" alt="Чёрная ракета"></div></div><div class="morph-panel" id="morphPanel">
+            <div class="morph-panel-heading"><span>✨ МАГИЯ ПЕШЕК</span><strong>5% ЗА ХОД</strong></div>
+            <div class="morph-active" id="morphActiveList" aria-live="polite"></div>
+            <p>Каждый ход пешки может превратить её в случайную фигуру. Кроме короля! Временная сила пропадает после следующего хода владельца, даже если он двинул другую фигуру. Новая UNO-карта появляется только если у команды больше нет своей карты.</p>
+          </div>
+
+          <div class="uno-reserve" id="unoReserve">
+            <div class="uno-reserve-heading"><span>🃏 ПЕРЕКРАШЕННЫЕ ФИГУРЫ</span><small>5 ходов новой команды</small></div>
+            <div class="uno-reserve-list" id="unoReserveList"></div>
+            <p class="uno-reserve-help">UNO-карта исчезает при ударе, а фигура соперника остаётся на месте и становится вашей на 5 ваших следующих ходов. Затем фигура возвращается к прежнему цвету на той клетке, где окажется.</p>
+          </div>
+
+          <div class="match-actions">
+            <button class="action-button replay-button" id="watchReplayBtn" type="button" hidden>🎞️ <span>Смотреть 5 лучших моментов</span></button>
+            <button class="action-button" id="drawBtn" type="button">½ <span>Предложить ничью</span></button>
+            <button class="action-button" id="resignBtn" type="button">⚑ <span>Сдаться</span></button>
+            <button class="action-button accent-button" id="rematchBtn" type="button" hidden>↻ <span>Реванш</span></button>
+            <button class="action-button" id="resetBtn" type="button">↻ <span>Новая локальная партия</span></button>
+          </div>
+          <div class="morph-rules"><div class="morph-rules-icon">✨</div><div><strong>Магия пешек · 5%</strong><p>После хода пешки она может на один следующий ход стать ферзём, ладьёй, слоном, конём, свиньёй или UNO-картой (если своя карта уже исчезла). При удаче — вспышка, искры и музыкальный звук! Если не успел воспользоваться силой, она всё равно исчезает после твоего следующего хода.</p></div></div>
+          <div class="pig-rules"><div class="pig-rules-icon">🐷</div><div><strong>Дикая свинья</strong><p>По две у каждого игрока! Ходят как ферзь, но куда именно — решает случай. Нажми на свою свинью в свой ход. Свинья не может подставить короля под шах.</p></div></div>
+          <div class="uno-rules"><img src="/pieces/wu.svg" alt="Карта UNO"><div><strong>Карта UNO · 1 на сторону</strong><p>Ходит ровно на 1 клетку вперёд — прямо или по диагонали. Назад ходить нельзя. При ударе по вражеской фигуре UNO-карта исчезает, а та остаётся на месте, меняет цвет и подчиняется владельцу карты 5 его следующих ходов. Затем возвращается к исходному цвету. Если карту побьют, это обычное взятие.</p></div></div>
+          <p class="panel-note">Это авторский вариант 10×10, не стандартные шахматы. Онлайн-ходы, свинью и 5% случайного превращения проверяет сервер.</p>
+        </aside>
+      </div>
+
+      <footer>© CHESS DUEL <span>ИСКУССТВО ДЕЛАТЬ ПРАВИЛЬНЫЙ ХОД</span></footer>
+    </main>
+  </div>
+
+  <div id="tradeModal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="tradeTitle"><div class="trade-modal"><div class="section-eyebrow">🏪 ТОРГОВЕЦ · k6</div><h2 id="tradeTitle">Обмен 3 фигур на 1</h2><p id="tradeVisitorText"></p><div class="trade-label">Посетитель уже включён и подсвечен! Выбери ЕЩЁ две фигуры:</div><div id="tradePieces" class="trade-pieces"></div><div class="trade-label">Выбери новую фигуру:</div><select id="tradeReceive" class="trade-select" aria-label="Фигура для получения"></select><div id="tradeValue" class="trade-value"></div><div class="confirm-actions"><button id="tradeCancel" class="neutral-button" type="button">Отмена</button><button id="tradeSubmit" class="confirm-trade" type="button">Заключить сделку</button></div></div></div>
+  <div id="replayModal" class="replay-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="replayTitle">
+    <div class="replay-window">
+      <div class="replay-head"><div><div class="section-eyebrow">CHESS DUEL • BEST OF MATCH</div><strong id="replayCounter">МОМЕНТ 1/5</strong></div><button type="button" id="replayClose" class="replay-close" aria-label="Закрыть реплей">✕</button></div>
+      <div class="replay-scene" id="replayScene">
+        <div id="replayBoard" class="replay-board" aria-label="Кинематографический повтор доски 10 на 10"></div>
+        <div class="replay-glow" aria-hidden="true"></div>
+      </div>
+      <div class="replay-footer"><h2 id="replayTitle">Лучшие моменты</h2><div id="replaySubtitle" class="replay-subtitle"></div><p id="replayCaption">Замедление ×0.25 · настоящий момент партии</p>
+      <div class="replay-progress-track"><div id="replayProgress"></div></div>
+      <button type="button" id="replayPlayAgain" class="replay-again" hidden>↻ Смотреть ещё раз</button>
+      <small>5 лучших моментов по 3 секунды, если в партии было хотя бы 5 ходов. Музыка — из оригинального трека.</small></div>
+    </div>
+  </div>
+  <div id="promotionModal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="promotionTitle">
+    <div class="promotion-modal"><div class="section-eyebrow">ПОСЛЕДНЯЯ ГОРИЗОНТАЛЬ</div><h2 id="promotionTitle">Выберите превращение</h2><div id="promotionChoices" class="promotion-choices"></div><button id="cancelPromotion" class="modal-cancel" type="button">Отмена</button></div>
+  </div>
+  <div id="confirmModal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="confirm-modal"><h2 id="confirmTitle">Подтвердите действие</h2><p id="confirmMessage"></p><div class="confirm-actions"><button id="confirmCancel" class="neutral-button" type="button">Отмена</button><button id="confirmAccept" class="danger-button" type="button">Подтвердить</button></div></div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
+

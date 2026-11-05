@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Ракета">
+  <defs><linearGradient id="fire" x1="0" y1="1" x2="0" y2="0"><stop stop-color="#ff332e"/><stop offset=".52" stop-color="#ffa24f"/><stop offset="1" stop-color="#ffd455"/></linearGradient></defs>
+  <g stroke="#141b1c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+   <path d="M46 83 Q33 106 60 115 Q87 106 74 83" fill="url(#fire)"/>
+   <path d="M46 67 24 78 17 103 47 92" fill="#697377"/>
+   <path d="M74 67 96 78 103 103 73 92" fill="#697377"/>
+   <path d="M43 86 C34 57 39 23 60 7 C81 23 86 57 77 86 Z" fill="#454b4e"/>
+   <path d="M45 27 C50 18 55 12 60 7 C65 12 70 18 75 27 Z" fill="#ffa24f"/>
+   <circle cx="60" cy="48" r="12" fill="#225e80" stroke="#141b1c" stroke-width="4"/>
+   <circle cx="57" cy="45" r="4" fill="#bceefa" stroke="none"/>
+   <path d="M45 87 H75 L80 95 H40 Z" fill="#697377"/>
+   <path d="M49 100 H71" stroke="#141b1c" stroke-width="3"/>
+  </g></svg>

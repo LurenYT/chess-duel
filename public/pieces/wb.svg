@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" aria-label="wb">
+<defs>
+  <linearGradient id="body" x1="0.15" x2="0.92" y1="0" y2="1">
+    <stop offset="0" stop-color="#fffef2"/><stop offset="1" stop-color="#d9d9c1"/>
+  </linearGradient>
+</defs>
+<g fill="url(#body)" stroke="#334438" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round">
+
+<path d="M50 15 Q62 24 65 37 Q67 48 57 58 H43 Q33 48 35 37 Q38 24 50 15Z"/>
+<path d="M50 12 L55 17 L50 22 L45 17Z"/>
+<path class="detail" d="M58 26 L40 47"/>
+<path d="M40 56 H60 L67 65 H33Z"/>
+<path d="M30 65 H70 L75 74 H25Z"/>
+<path d="M22 74 H78 L81 82 H19Z"/>
+<path class="detail" d="M34 77 H66"/>
+</g>
+<style>.detail{fill:none;stroke:#a5b5a0;stroke-width:2.8}.eye{fill:#263a30;stroke:#334438;stroke-width:1.2}.snout{fill:#f1aeaa;stroke:#334438;stroke-width:2.6}.nostril{fill:#9c5f68;stroke:none}</style>
+</svg>
