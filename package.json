@@ -1,8 +1,8 @@
 {
   "name": "chess-duel",
-  "version": "8.0.0",
+  "version": "9.0.0",
   "private": true,
-  "description": "CHESS DUEL 8: шахматы 10×10, ракеты, строгие бриллиантовые ходы, быстрый онлайн и реплеи",
+  "description": "CHESS DUEL 9: шахматы 10×10, минёры и мины, одноразовые ракеты, предходы, одна общая лавка, плавный онлайн и реплеи",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",

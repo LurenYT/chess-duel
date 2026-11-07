@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Чёрный минёр">
+<defs><linearGradient id="uniform" x1=".1" x2=".9" y1="0" y2="1"><stop stop-color="#45494b"/><stop offset="1" stop-color="#363b3e"/></linearGradient></defs>
+<g stroke="#181b1b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+<path d="M25 75 Q28 59 36 55 H64 Q72 60 75 75 L81 83 H19 Z" fill="url(#uniform)"/>
+<path d="M28 47 Q24 26 35 19 Q50 10 65 19 Q76 28 72 47 L66 55 H34Z" fill="url(#uniform)"/>
+<path d="M20 42 H80 Q82 45 78 49 H22 Q18 46 20 42Z" fill="#b76f30"/>
+<path d="M34 36 Q50 28 66 36 L62 48 H38 Z" fill="#747f85"/>
+<path d="M45 16 V8 H55 V16" fill="#b76f30"/>
+<circle cx="50" cy="70" r="10" fill="#ee9f39" stroke="#181b1b" stroke-width="2.5"/>
+<path d="M50 62 V78 M42 70 H58 M44 64 L56 76 M56 64 L44 76" fill="none" stroke="#5b3622" stroke-width="2.1"/>
+<path d="M25 83 H75" fill="none"/>
+</g></svg>

@@ -3,12 +3,12 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { Chess10, START } = require('../public/chess10.js');
 
-test('10x10 board with 42 pieces, four pigs and two UNO cards, correct colors and orientation', () => {
+test('10x10 board with 44 pieces, four pigs and two UNO cards, correct colors and orientation', () => {
   const g = new Chess10();
   assert.equal(g.fen(), START);
   let count = 0;
   for (const f of 'abcdefghij') for (let r=1;r<=10;r++) if(g.get(f+r))count++;
-  assert.equal(count, 42);
+  assert.equal(count, 44);
   assert.deepEqual(g.get('f1'), {type:'k',color:'w'});
   assert.deepEqual(g.get('e10'), {type:'q',color:'b'});
   assert.deepEqual(g.get('a3'), {type:'s',color:'w'});
@@ -208,7 +208,7 @@ test('5% chance: no random rolls when querying legal moves, exact boundary at 0.
 
 test('each mutation outcome can be selected, but no kings, no duplicates of a team UNO', () => {
   const noUno='5k4/10/10/10/10/10/10/10/4P5/5K4 w - - 0 1';
-  const allowed=['n','b','r','q','s','u'];
+  const allowed=['n','b','r','q','s','u','m'];
   for(let i=0;i<allowed.length;i++) {
     const values=[0.0001,(i+0.1)/allowed.length];
     const game=new Chess10(noUno,()=>values.shift());
@@ -220,7 +220,7 @@ test('each mutation outcome can be selected, but no kings, no duplicates of a te
   const values=[0.01,0.999];
   const game=new Chess10(withUno,()=>values.shift());
   game.move({from:'e2',to:'e4'});
-  assert.equal(game.get('e4').type,'s','when a team UNO already exists, a pawn cannot duplicate it');
+  assert.equal(game.get('e4').type,'m','when UNO exists but miner does not, magic may produce a miner');
   assert.equal(game.get('d3').type,'u');
   assert.equal(new Chess10(game.fen()).fen(),game.fen());
 });
@@ -521,18 +521,18 @@ test('Rocket moves to any adjacent free or opponent square, and launches exactly
   assert.equal(targets.some(m=>m.to==='e9'),false);
   const record=g.move({from:'e5',to:'e8'});
   assert.ok(record.launch);
-  assert.deepEqual(g.get('e8'),{type:'t',color:'w'});
+  assert.equal(g.get('e8'),null,'rocket is consumed by explosion');
   assert.equal(g.get('e5'),null);
-  assert.equal(new Chess10(g.fen()).get('e8')?.type,'t');
+  assert.equal(new Chess10(g.fen()).get('e8'),null);
 });
 
-test('Rocket launch blasts all 8 neighboring pieces of both colors, but preserves rocket itself',()=>{
+test('Rocket launch blasts all 8 neighboring pieces of both colors, and consumes the launching rocket',()=>{
   const g=new Chess10('k9/3q6/3r1P4/3n6/10/4T5/10/10/10/9K w - - 0 1');
   const move=g.move({from:'e5',to:'e8'});
   assert.equal(move.launch.victims.length,4);
   assert.deepEqual(move.launch.victims.map(x=>x.square).sort(),['d7','d8','d9','f8']);
   for(const cell of ['d7','d8','d9','f8'])assert.equal(g.get(cell),null);
-  assert.deepEqual(g.get('e8'),{type:'t',color:'w'});
+  assert.equal(g.get('e8'),null,'rocket is consumed by explosion');
   assert.equal(g.get('a10')?.type,'k');
   assert.equal(g.get('j1')?.type,'k');
 });
@@ -552,7 +552,7 @@ test('Black rocket launches in opposite direction, with 3-square backward flight
   assert.ok(!options.some(m=>m.to==='e9'));
   const out=g.move({from:'e6',to:'e3'});
   assert.ok(out.launch);
-  assert.equal(g.get('e3')?.type,'t');
+  assert.equal(g.get('e3'),null,'launched black rocket is consumed');
 });
 
 test('Rare 2% crate drop spawns a rocket on first available baseline square',()=>{
@@ -593,4 +593,76 @@ test('Quiet ordinary moves are not automatically labeled as brilliant',()=>{
   const result=g.move({from:'e2',to:'e4'});
   assert.equal(result.brilliant,false);
   assert.equal(result.analysis?.depth,3);
+});
+
+test('one miner per team at start and duplicate miners rejected on loaded positions',()=>{
+  const g=new Chess10();
+  assert.deepEqual(g.get('h3'),{type:'m',color:'w'});
+  assert.deepEqual(g.get('h8'),{type:'m',color:'b'});
+  assert.throws(()=>new Chess10('9k/10/10/10/10/4MM4/10/10/10/5K4 w - - 0 1'),/одного минера/);
+});
+
+test('miner moves to EMPTY adjacent square but places a mine exactly two squares away without moving',()=>{
+  const g=new Chess10('5k4/10/4p5/10/10/4M5/10/10/10/5K4 w - - 0 1');
+  const moves=g.moves({square:'e5',verbose:true});
+  assert.ok(moves.some(m=>m.to==='d6'&&!m.flags.includes('M')));
+  assert.ok(moves.some(m=>m.to==='e7'&&m.flags.includes('M')));
+  assert.ok(!moves.some(m=>m.to==='e8'), 'cannot plant mine on occupied square');
+  const planted=g.move({from:'e5',to:'e7'});
+  assert.deepEqual(planted.minePlaced,{square:'e7',owner:'w',duration:7});
+  assert.deepEqual(g.get('e5'),{type:'m',color:'w'});
+  assert.equal(g.get('e7'),null);
+  assert.equal(g.mines()[0].remaining,7);
+  assert.equal(g.mines()[0].square,'e7');
+  assert.deepEqual(new Chess10(g.fen()).mines(),g.mines());
+});
+
+test('enemy walking on a mine dies, mine is cleared, own pieces do not trigger it',()=>{
+  const g=new Chess10('5k4/10/4p5/10/10/4M5/10/10/10/5K4 w - - 0 1');
+  g.move({from:'e5',to:'e7'});
+  const exploded=g.move({from:'e8',to:'e7'});
+  assert.deepEqual(exploded.mineDetonated,{square:'e7',victim:'p',owner:'w'});
+  assert.equal(g.get('e7'),null);
+  assert.equal(g.get('e8'),null);
+  assert.deepEqual(g.mines(),[]);
+  assert.equal(g.get('e5').type,'m');
+});
+
+test('planted mine disappears after seven later completed plies',()=>{
+  const g=new Chess10('9k/10/10/10/10/4M5/10/10/10/5K4 w - - 0 1');
+  g.move({from:'e5',to:'e7'});
+  const line=[['j10','i10'],['f1','e1'],['i10','j10'],['e1','f1'],['j10','i10'],['f1','e1'],['i10','j10']];
+  for(let i=0;i<line.length;i++){
+    g.move({from:line[i][0],to:line[i][1]});
+    if(i<6)assert.equal(g.mines()[0].remaining,6-i);
+  }
+  assert.deepEqual(g.mines(),[]);
+});
+
+test('king cannot enter enemy mine and miners never check or capture the king',()=>{
+  const g=new Chess10('10/10/4k5/10/10/4M5/10/10/10/5K4 w - - 0 1');
+  g.move({from:'e5',to:'e7'});
+  assert.equal(g.turn(),'b');
+  assert.equal(g.moves({square:'e8',verbose:true}).some(m=>m.to==='e7'),false);
+  assert.throws(()=>g.move({from:'e8',to:'e7'}),/Недопустимый/);
+});
+
+test('magic pawn reaching far rank stays permanently evolved and does not turn back',()=>{
+  const g=new Chess10('9k/4Q5/10/10/10/10/10/10/10/5K4 w - - 0 1 - w:q:e9');
+  const record=g.move({from:'e9',to:'e10'});
+  assert.deepEqual(record.morphLocked,{type:'q',square:'e10',color:'w'});
+  assert.equal(g.morphs().w,null);
+  assert.deepEqual(g.get('e10'),{type:'q',color:'w'});
+  g.move({from:'j10',to:'j9'});
+  g.move({from:'f1',to:'e1'});
+  assert.deepEqual(g.get('e10'),{type:'q',color:'w'});
+});
+
+test('merchant has one persistent left- or right-side location for both players',()=>{
+  const g=new Chess10();
+  g.setShopSide('left');
+  assert.equal(g.shop().side,'left');
+  assert.deepEqual(g.shop().entrances,['a7','a6','a5']);
+  assert.equal(new Chess10(g.fen()).shop().side,'left');
+  assert.throws(()=>g.setShopSide('top'),/Сторону/);
 });

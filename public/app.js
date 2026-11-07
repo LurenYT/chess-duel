@@ -3,23 +3,26 @@ const { Chess10 } = window;
 
 const $ = (id) => document.getElementById(id);
 const FILES = 'abcdefghij';
-const PIECE_NAME = { p: 'Пешка', n: 'Конь', b: 'Слон', r: 'Ладья', q: 'Ферзь', k: 'Король', s: 'Свинья', u: 'UNO-карта', t: 'Ракета' };
+const PIECE_NAME = { p: 'Пешка', n: 'Конь', b: 'Слон', r: 'Ладья', q: 'Ферзь', k: 'Король', s: 'Свинья', u: 'UNO-карта', t: 'Ракета', m: 'Минёр' };
 const PIECE_SYMBOL = { w: '♔', b: '♚' };
 const BUFF_INFO={luck:['Золотая удача','Пешки: 25% шанс магии'],sprint:['Спринт','Двойной ход пешки откуда угодно'],knight:['Стальные кони','Кони ходят и на 1 клетку'],rook:['Рывок ладей','Ладьи ходят на 1 по диагонали'],radar:['Радар','Подсветка опасных клеток']};
 const DEBUFF_INFO={fog:['Туман войны','Не видно вражеских фигур'],tired:['Тяжёлые сапоги','Пешки не могут ходить на 2'],sleepy:['Сонные кони','Нельзя двигать конями'],queen:['Скованная королева','Ферзь ходит только на 1'],pig:['Тишина в хлеву','Свиньи не активируются']};
-const PIECE_COST={p:1,n:3,b:3,r:5,q:9,s:6,u:6,t:12};
+const PIECE_COST={p:1,n:3,b:3,r:5,q:9,s:6,u:6,m:5,t:12};
 const NAME_SUFFIX={w:'белых',b:'чёрных'};
 let socket = null;
 let mode = 'local';
 let role = 'w';
 let room = null;
 let localGame = new Chess10();
+localGame.setShopSide(Math.random()<.5?'left':'right');
 let selected = null;
 let promotionOptions = null;
 let receivedAt = Date.now();
 let toastTimeout = null;
 let pigBusy = false;
 let pendingOnline = null; // Immediate client-side move projection; server is authoritative.
+let premove=null; // One changeable, cancellable move queued while the opponent thinks.
+let incomingAnimation=null;
 let onlineCache = {fen:null,game:null};
 let muted = localStorage.getItem('chess-duel:muted') === 'yes';
 let audio = null;
@@ -74,6 +77,45 @@ function canMove() {
   return !!(room?.ready && room.started && socket?.connected && (role === 'w' || role === 'b') && room.turn === role);
 }
 
+function canPremove(){
+  return mode==='online' && !pigBusy && !pendingOnline && !isGameFinished() &&
+    room?.ready && room.started && socket?.connected && ['w','b'].includes(role) && room.turn!==role;
+}
+function canInteract(){return canMove()||canPremove();}
+function inputGame(){
+  if(!canPremove())return game();
+  try {
+    // Simulate our turn locally ONLY to suggest destinations: the server will
+    // validate the premove against the REAL position when our turn arrives.
+    const fields=room.fen.split(' ');
+    fields[1]=role;fields[3]='-';
+    return new Chess10(fields.join(' '),()=>.97);
+  }catch{return game();}
+}
+function queuePremove(move){
+  premove={from:move.from,to:move.to||null,promotion:move.promotion||null,pig:!!move.pig};
+  resetSelection();render();
+  toast(premove.pig?`⏳ Свинья ${premove.from} хрюкнет в твой следующий ход.`:`⏳ Предход ${premove.from} → ${premove.to}: выполнится после ответа соперника, если разрешён.`);
+}
+function cancelPremove(){
+  premove=null;render();toast('Предход отменён. Можно выбрать другой.');
+}
+function flushPremove(){
+  if(!premove||mode!=='online'||!room?.ready||room?.result||room.turn!==role||!socket?.connected||pendingOnline)return;
+  const move=premove;premove=null;
+  // Do not trust the old highlights, validate against updated game state.
+  try{
+    if(move.pig){
+      if(new Chess10(room.fen).get(move.from)?.type!=='s')return toast('Свинья больше не находится на выбранной клетке.');
+      socket.emit('game:pig',{from:move.from},reply=>{if(!reply?.ok)toast(reply?.error||'Свинья не может пойти.');});
+      render();return;
+    }
+    const allowed=new Chess10(room.fen).moves({square:move.from,verbose:true}).some(m=>m.to===move.to &&
+      (m.promotion||null)===(move.promotion||null));
+    if(!allowed){render();return toast('Предход отменён: после хода соперника он стал невозможен.');}
+  }catch{render();return toast('Не удалось проверить предход.');}
+  submitMove(move);
+}
 function plyCount(){return mode==='local'?localGame.ply():game().ply();}
 function musicUpdate() {
   bgMusic.volume=musicVolume/100;
@@ -106,37 +148,35 @@ function resetSelection() {
 }
 
 function trySquare(square) {
-  if (promotionOptions || !canMove()) return;
-  const current = game();
-  const piece = current.get(square);
-  if (piece?.type === 's' && piece.color === current.turn()) {
-    activatePig(square);
+  if(promotionOptions||!canInteract())return;
+  const pre=canPremove(),current=pre?inputGame():game();
+  const piece=game().get(square);
+  const active=pre?role:current.turn();
+  if(piece?.type==='s'&&piece.color===active){
+    if(pre)queuePremove({from:square,pig:true});else activatePig(square);
     return;
   }
-  if (selected) {
-    const candidates = (fogActive() && piece?.color!==current.turn()) && mode==='online' ? [{from:selected,to:square,type:current.get(selected)?.type,color:current.turn(),promotion:null}]
-      : current.moves({ square: selected, verbose: true }).filter((move) => move.to === square);
-    if(fogActive() && current.get(selected)?.type==='p' &&
-      (square.endsWith(current.turn()==='w'?'10':'1')))
+  if(selected){
+    let candidates=current.moves({square:selected,verbose:true}).filter(move=>move.to===square);
+    if(!pre&&fogActive()&&mode==='online'&&!candidates.length &&
+      game().get(selected)?.color===active && piece?.color!==active){
+      candidates=[{from:selected,to:square,type:game().get(selected)?.type,color:active,promotion:null}];
+    }
+    if(!pre&&fogActive()&&game().get(selected)?.type==='p'&&square.endsWith(active==='w'?'10':'1')){
       return showPromotion(['q','r','b','n'].map(promotion=>({...candidates[0],promotion})));
-    if (candidates.length > 1 && candidates.some((move) => move.promotion)) {
-      promotionOptions = candidates;
-      showPromotion(candidates);
-      return;
     }
-    if (candidates.length === 1) {
-      submitMove(candidates[0]);
+    if(candidates.length>1&&candidates.some(move=>move.promotion)){
+      promotionOptions=candidates;showPromotion(candidates);return;
+    }
+    if(candidates.length===1){
+      if(pre)queuePremove(candidates[0]);else submitMove(candidates[0]);
       return;
     }
   }
-  if (piece?.color === current.turn()) {
-    selected = selected === square ? null : square;
-  } else {
-    selected = null;
-  }
+  if(piece?.color===active){selected=selected===square?null:square;}
+  else selected=null;
   renderBoard();
 }
-
 
 function showPromotion(options) {
   const container = $('promotionChoices');
@@ -151,13 +191,14 @@ function showPromotion(options) {
     button.title = PIECE_NAME[type];
     button.setAttribute('aria-label', `Превратить в: ${PIECE_NAME[type]}`);
     button.append(image);
-    button.addEventListener('click', () => submitMove(move));
+    button.addEventListener('click', () => canPremove()?queuePremove(move):submitMove(move));
     container.append(button);
   }
   $('promotionModal').hidden = false;
 }
 
 function submitMove(move) {
+  if(canPremove()){queuePremove(move);return;}
   const payload = { from: move.from, to: move.to };
   if (move.promotion) payload.promotion = move.promotion;
   resetSelection();
@@ -189,6 +230,11 @@ function submitMove(move) {
     }
   });
   renderBoard();
+  // Draw the optimistic flight right now, not after the network roundtrip.
+  if(pendingOnline?.preview){
+    const localRecord=pendingOnline.preview.history({verbose:true}).at(-1);
+    if(localRecord)presentMove(localRecord,true);
+  }
 }
 
 function renderRentals() {
@@ -266,9 +312,10 @@ function renderEvents(){
   const tile=$('shopTile');tile.classList.toggle('open',shop.open);
   tile.classList.toggle('closed',shop.closed);
   tile.classList.toggle('shop-flipped',mode==='online'&&role==='b');
-  $('shopTileLabel').textContent=shop.closed?'ПРОДАНО':shop.open?'k6 · ВОЙТИ':'ХОД 50';
+  $('boardShop').classList.toggle('shop-left',(shop.side==='left')!==(mode==='online'&&role==='b'));
+  $('shopTileLabel').textContent=shop.closed?'ПРОДАНО':shop.open?`${shop.tile} · ВОЙТИ`:'ХОД 50';
   tile.title=shop.closed?'Лавка закрыта после сделки':shop.open?
-    'Вход k6: выберите фигуру на j5, j6 или j7 и нажмите лавку (или перетащите её сюда).':'Лавка открывается на 50-м полуходе';
+    `Общий магазин ${shop.tile}: подведите фигуру к ${shop.entrances.join(', ')}.`:'Лавка открывается на 50-м полуходе';
   const visitor=tradeVisitor&&current.get(tradeVisitor);
   const preview=$('shopVisitorArt');
   preview.replaceChildren();
@@ -279,7 +326,7 @@ function renderEvents(){
     preview.append(pic);
   }
 }
-const SHOP_NEAR=['j5','j6','j7'];
+const SHOP_NEAR=()=>game().shop().entrances;
 function visitorValue(current,square){
   const piece=current.get(square);
   if(!piece)return 0;
@@ -289,19 +336,19 @@ function showShop(entrance){
   if(!canMove())return toast('Сейчас нельзя торговать.');
   const current=game(),shop=current.shop();
   if(!shop.open)return toast(shop.closed?'Торговец уже совершил единственную сделку.':`Лавка откроется через ${50-current.ply()} ход(ов).`);
-  const allowed=SHOP_NEAR.filter(square=>current.get(square)?.color===current.turn()&&visitorValue(current,square)>0);
+  const allowed=SHOP_NEAR().filter(square=>current.get(square)?.color===current.turn()&&visitorValue(current,square)>0);
   const visitor=entrance&&allowed.includes(entrance)?entrance:
     selected&&allowed.includes(selected)?selected:allowed.length===1?allowed[0]:null;
   if(!visitor){
     $('shopTile').classList.add('needs-visitor');
     setTimeout(()=>$('shopTile').classList.remove('needs-visitor'),1400);
-    return toast(allowed.length>1?'Выбери свою фигуру на j5, j6 или j7, затем нажми лавку k6.':
-      'Подведи любую свою фигуру, кроме короля, на j5, j6 или j7.');
+    return toast(allowed.length>1?`Выбери свою фигуру на ${shop.entrances.join(', ')}, затем нажми на лавку.`:
+      `Подведи фигуру на ${shop.entrances.join(', ')}.`);
   }
   tradeVisitor=visitor;tradeSelected=[];
   selected=null;
   const unit=current.get(visitor),value=visitorValue(current,visitor);
-  $('tradeVisitorText').textContent=`В лавку k6 вошла ${PIECE_NAME[unit.type].toLowerCase()} (${visitor}, ${value} очк.). Она автоматически включена в обмен и подсвечена голубым. Выбери ещё две свои фигуры.`;
+  $('tradeVisitorText').textContent=`В лавку ${shop.tile} вошла ${PIECE_NAME[unit.type].toLowerCase()} (${visitor}, ${value} очк.). Она автоматически включена в обмен и подсвечена голубым. Выбери ещё две свои фигуры.`;
   const container=$('tradePieces');container.replaceChildren();
   const myColor=current.turn();
   for(const file of FILES)for(let r=1;r<=10;r++){
@@ -328,9 +375,9 @@ function updateTradeOptions(){
   for(const [type,price] of Object.entries(PIECE_COST)){
     const opt=document.createElement('option');opt.value=type;opt.textContent=`${PIECE_NAME[type]} — ${price} очков`;
     opt.disabled=tradeSelected.length!==2||price>value||
-      (type==='u'&&![...Array(100)].every((_,i)=>{
+      (['u','m'].includes(type)&&![...Array(100)].every((_,i)=>{
         const sq=FILES[i%10]+(10-Math.floor(i/10));const p=current.get(sq);
-        return p?.type!=='u'||p.color!==current.turn()||[tradeVisitor,...tradeSelected].includes(sq);
+        return p?.type!==type||p.color!==current.turn()||[tradeVisitor,...tradeSelected].includes(sq);
       }));
     selector.append(opt);
   }
@@ -373,7 +420,7 @@ function renderBoard() {
   const last = mode === 'local'
     ? localGame.history({ verbose: true }).at(-1)
     : room?.moves?.at(-1);
-  const legalMoves = selected && canMove() && !fogActive() ? current.moves({ square: selected, verbose: true }) : [];
+  const legalMoves = selected && canInteract() && !fogActive() ? inputGame().moves({ square: selected, verbose: true }) : [];
   const fog=fogActive();
   const viewerColor=mode==='online'?role:current.turn();
   const radarSide=mode==='online'?role:current.turn();
@@ -409,7 +456,8 @@ function renderBoard() {
       if (!fog && last && (square === last.from || square === last.to)) button.classList.add('last-move');
       if(!fog&&last?.brilliant&&(square===last.from||square===last.to))button.classList.add('brilliant-square');
       if(square===tradeVisitor)button.classList.add('shop-visitor-square');
-      if(SHOP_NEAR.includes(square)&&current.shop().open&&piece?.color===current.turn())button.classList.add('shop-adjacent');
+      if(premove&&(square===premove.from||square===premove.to))button.classList.add('premove-square');
+      if(SHOP_NEAR().includes(square)&&current.shop().open&&piece?.color===current.turn())button.classList.add('shop-adjacent');
       if(danger.has(square))button.classList.add('radar-danger');
       if(fog)button.classList.add('fog-square');
       if (square === selected) button.classList.add('selected');
@@ -428,6 +476,10 @@ function renderBoard() {
         button.classList.add('rental-square');
         button.title=`Перекрашена UNO-картой · осталось ходов: ${rentalPositions[borrowing].remaining}`;
       }
+      if(piece?.type==='m' && !(fog && piece.color!==viewerColor)){
+        button.classList.add('miner-square');
+        button.title='💣 Минёр: соседняя пустая клетка — ход, на 2 клетки в любом направлении — установить мину на 7 полуходов.';
+      }
       if(piece?.type==='t' && !(fog && piece.color!==viewerColor)){
         button.classList.add('rocket-square');
         button.title='🚀 Соседняя клетка — обычный ход. На 3 клетки прямо вперёд — взлёт и взрыв 8 соседних клеток!';
@@ -438,7 +490,16 @@ function renderBoard() {
       }
       if (targetSquares.has(square)){
         const rocketTarget=legalMoves.some(m=>m.to===square && m.flags.includes('L'));
-        button.classList.add(rocketTarget?'rocket-target':piece?'can-capture':'can-move');
+        const mineTarget=legalMoves.some(m=>m.to===square && m.flags.includes('M'));
+        button.classList.add(mineTarget?'mine-target':rocketTarget?'rocket-target':piece?'can-capture':'can-move');
+      }
+      const mine=current.mines().find(x=>x.square===square);
+      if(mine && !(fog&&mine.owner!==viewerColor)){
+        button.classList.add('mine-square');
+        const icon=document.createElement('span');icon.className='mine-art';icon.textContent='💣';
+        icon.title=`Мина ${NAME_SUFFIX[mine.owner]} · осталось ${mine.remaining} полуходов`;
+        button.append(icon);
+        const badge=document.createElement('small');badge.className='mine-counter';badge.textContent=mine.remaining;button.append(badge);
       }
       if(crateSquare===square){
         button.classList.add('crate-square');
@@ -588,6 +649,9 @@ function renderMoves() {
 }
 
 function render() {
+  $('premovePanel').hidden=!(mode==='online'&&['w','b'].includes(role));
+  $('premoveInfo').textContent=premove?(premove.pig?`⏳ Предход свиньи: ${premove.from} → случайная клетка`:`⏳ Предход: ${premove.from} → ${premove.to}`):canPremove()?'Ход противника: выбери свою фигуру и клетку для предхода.':'Предход можно задать во время хода соперника.';
+  $('premoveCancel').disabled=!premove;
   if (mode === 'online' && !room) return;
   $('localBtn').classList.toggle('active', mode === 'local');
   $('createBtn').classList.toggle('active', mode === 'online');
@@ -632,7 +696,7 @@ function setRoom(reply) {
   role = reply.color;
   closeReplay();replayAutoKey=null;
   room = reply.state;
-  pendingOnline=null;onlineCache.fen=null;onlineCache.game=null;
+  pendingOnline=null;premove=null;onlineCache.fen=null;onlineCache.game=null;
   pigBusy = false;
   receivedAt = Date.now();
   if (reply.token) localStorage.setItem(`chess-duel:seat:${reply.code}`, reply.token);
@@ -649,8 +713,8 @@ function startLocal() {
   mode = 'local';
   role = 'w';
   room = null;
-  localGame = new Chess10();
-  pendingOnline=null;onlineCache.fen=null;onlineCache.game=null;
+  localGame = new Chess10();localGame.setShopSide(Math.random()<.5?'left':'right');
+  pendingOnline=null;premove=null;onlineCache.fen=null;onlineCache.game=null;
   closeReplay();replayAutoKey=null;bgMusic.pause();bgMusic.currentTime=0;
   pigBusy = false;
   resetSelection();
@@ -759,6 +823,8 @@ function playSound(type) {
     tone(ctx,now,380,760,.18,'triangle',.11);
     tone(ctx,now+.12,540,1180,.25,'sine',.13);
     tone(ctx,now+.26,850,1550,.36,'triangle',.10);
+  } else if(type==='mine'){
+    tone(ctx,now,300,105,.25,'sawtooth',.11);tone(ctx,now+.13,150,62,.31,'triangle',.12);
   } else if(type==='trade'){
     tone(ctx,now,390,470,.23,'sine',.13);
     tone(ctx,now+.16,600,840,.32,'triangle',.12);
@@ -911,7 +977,7 @@ function brilliantEffect(record){
   }
 }
 
-function presentMove(record) {
+function presentMove(record,optimistic=false) {
   if (!record) return;
   if(record.trade){
     playSound(record.trade.receive==='t'?'rocket':'trade');
@@ -937,7 +1003,17 @@ function presentMove(record) {
     boardSquare(record.to)?.classList.add('crate-arrive');
     if(record.crateCollected.kind!=='rocket')toast(`🎁 ${record.crateCollected.label}: ${record.crateCollected.kind==='buff'?'усиление':'помеха'} на 5 ходов!`);
   }
-  if(record.shopOpened)toast('🏪 Лавка k6 открыта! Приведите любую фигуру на j5, j6 или j7.');
+  if(record.shopOpened)toast('🏪 Общая лавка открыта! Подведи фигуру к её стороне доски.');
+  if(record.minePlaced){
+    playSound('mine');floatingSymbol('💣 МИНА УСТАНОВЛЕНА · 7',record.minePlaced.square);
+    boardSquare(record.minePlaced.square)?.classList.add('mine-flash');
+    setTimeout(()=>boardSquare(record.minePlaced.square)?.classList.remove('mine-flash'),700);
+  }
+  if(record.mineDetonated){
+    playSound('rocket');floatingSymbol('💥 МИНА! ФИГУРА УНИЧТОЖЕНА',record.mineDetonated.square);
+    boardSquare(record.mineDetonated.square)?.classList.add('mine-explosion');
+    setTimeout(()=>boardSquare(record.mineDetonated.square)?.classList.remove('mine-explosion'),900);
+  }
   if(record.launch){
     // Zooming rocket followed by a ring of light and 8-cell blast.
     playSound('rocket');
@@ -963,7 +1039,8 @@ function presentMove(record) {
   const check = mode==='online'?room.check:game().isCheck();
   const unoEffect=record.type==='u' && record.captured && record.captured!=='u';
   if (record.captured && !unoEffect) captureEffect(record);
-  if(!record.launch)playSound(unoEffect?'uno':record.captured ? 'capture' : 'move');
+  if(!record.launch&&!record.minePlaced&&!record.mineDetonated)playSound(unoEffect?'uno':record.captured ? 'capture' : 'move');
+  if(record.morphLocked)floatingSymbol('✨ НАВСЕГДА!',record.morphLocked.square);
   if (record.morph) setTimeout(()=>morphEffect(record.morph),310);
   else if (record.morphExpired) {
     const square=record.from===record.morphExpired.square?record.to:record.morphExpired.square;
@@ -980,8 +1057,10 @@ function presentMove(record) {
     setTimeout(()=>to.classList.remove('conversion-flash'),950);
   }
   if (check) setTimeout(() => playSound('check'), 150);
-  if (reduced) return;
+  if (reduced || record.minePlaced) return;
 
+  for(const stale of document.querySelectorAll('.flight-piece'))stale.remove();
+  for(const hidden of document.querySelectorAll('.hidden-while-moving'))hidden.classList.remove('hidden-while-moving');
   const flight = document.createElement('img');
   flight.className = 'flight-piece';
   flight.alt = '';
@@ -1004,14 +1083,14 @@ function presentMove(record) {
   ] : record.launch ? [
     {transform:'translate(0,0) scale(.85) rotate(0deg)',filter:'drop-shadow(0 0 2px #fff)'},
     {transform:`translate(${dx*.5}px,${dy*.5}px) scale(1.72) rotate(-8deg)`,filter:'drop-shadow(0 0 18px #ff8b24)',offset:.52},
-    {transform:`translate(${dx}px,${dy}px) scale(.9) rotate(0deg)`,filter:'drop-shadow(0 0 40px #fff)'}
+    {transform:`translate(${dx}px,${dy}px) scale(.01) rotate(0deg)`,filter:'drop-shadow(0 0 60px #ffba49)'}
   ] : [
     {transform:'translate(0,0) scale(1)'},
     {transform:`translate(${dx*.52}px,${dy*.52-12}px) scale(1.09)`,offset:.52},
     {transform:`translate(${dx}px,${dy}px) scale(1)`}
   ];
   if(unoEffectActive)frames[frames.length-1].transform += ' rotate(16deg) scale(.01)';
-  const animation = flight.animate(frames, {duration:record.launch?760:pig?690:unoEffectActive?480:250, easing:'ease-in-out',fill:'forwards'});
+  const animation = flight.animate(frames, {duration:record.launch?760:pig?690:unoEffectActive?480:optimistic?300:430, easing:'ease-in-out',fill:'forwards'});
   const cleanup = () => {
     flight.remove();
     if (targetPiece) targetPiece.classList.remove('hidden-while-moving');
@@ -1058,12 +1137,12 @@ function dragCleanup() {
   $('board').classList.remove('dragging-board');
 }
 $('board').addEventListener('pointerdown', (event) => {
-  if (event.button !== 0 || promotionOptions || !canMove()) return;
+  if (event.button !== 0 || promotionOptions || !canInteract()) return;
   const button = event.target.closest('.square');
   if (!button) return;
   const source = button.dataset.square;
   const piece = game().get(source);
-  if (piece && piece.color === game().turn() && (piece.type !== 's' || (game().shop().open && SHOP_NEAR.includes(source)))) {
+  if (piece && piece.color === (canPremove()?role:game().turn()) && (piece.type !== 's' || (game().shop().open && SHOP_NEAR().includes(source)))) {
     drag={id:event.pointerId,from:source,piece,startX:event.clientX,startY:event.clientY,
       active:false,ghost:null,hover:null};
   }
@@ -1145,6 +1224,7 @@ $('confirmCancel').addEventListener('click', () => { $('confirmModal').hidden = 
 $('resignBtn').addEventListener('click', () => askConfirm('Сдаться в партии?', 'Сопернику будет засчитана победа. Отменить это действие невозможно.', () => sendAction('game:resign')));
 $('drawBtn').addEventListener('click', () => sendAction('game:draw'));
 $('rematchBtn').addEventListener('click', () => sendAction('game:rematch'));
+$('premoveCancel').addEventListener('click',cancelPremove);
 
 if (typeof window.io === 'function') {
   socket = window.io({ autoConnect: false, reconnection: true, transports: ['websocket','polling'], tryAllTransports: true, reconnectionDelay: 250, reconnectionDelayMax: 1500 });
@@ -1158,14 +1238,18 @@ if (typeof window.io === 'function') {
   socket.on('room:state', (updated) => {
     if (mode === 'online' && room?.code === updated.code) {
       const previous = room;
-      if(previous?.result&&!updated.result){closeReplay();replayAutoKey=null;}
+      if(previous?.result&&!updated.result){closeReplay();replayAutoKey=null;premove=null;}
       room = updated;
+      const lastUpdate=updated.moves.at(-1);
+      const ourOptimistic=!!pendingOnline && updated.moves.length>pendingOnline.ply &&
+        lastUpdate?.color===role && lastUpdate?.from===pendingOnline.from && lastUpdate?.to===pendingOnline.to;
       if(pendingOnline && (updated.moves.length>pendingOnline.ply||updated.result))pendingOnline=null;
       onlineCache.fen=null;onlineCache.game=null;
       receivedAt = Date.now();
       pigBusy = false;
       render();
-      if (updated.moves.length === previous.moves.length + 1) presentMove(updated.moves.at(-1));
+      if(updated.moves.length>previous.moves.length && !ourOptimistic)presentMove(updated.moves.at(-1));
+      if(premove && updated.turn===role)setTimeout(flushPremove,0);
     }
   });
   socket.on('room:replaced', () => {

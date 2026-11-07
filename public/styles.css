@@ -454,3 +454,29 @@ footer{display:none}
 .replay-cell.replay-blast{animation:replay-rocket-blast .7s ease-out both}
 @keyframes replay-rocket-blast{0%{box-shadow:inset 0 0 0 30px #ff9d27dd;filter:brightness(2.6)}100%{box-shadow:none;filter:none}}
 @media(prefers-reduced-motion:reduce){.replay-cell.replay-blast{animation:none}}
+
+/* CHESS DUEL 9 — a single shared merchant, mirrored when black views the board. */
+.board-and-shop.shop-left{grid-template-columns:50px minmax(0,1fr)!important}
+.board-and-shop.shop-left .board-frame{grid-column:2}
+.board-and-shop.shop-left .shop-tile{grid-column:1}
+@media(max-width:510px){.board-and-shop.shop-left{grid-template-columns:39px minmax(0,1fr)!important}}
+.premove-panel{background:#17343d;border:1px solid #3e8195;border-radius:4px;padding:10px;margin:11px 0;color:#d5f4fa}
+.premove-panel[hidden]{display:none}
+.premove-panel strong{font-size:11px;letter-spacing:.08em;color:#8ce9ff}
+.premove-panel p{font-size:12px;margin:6px 0;color:#c4e6e9}
+.premove-panel button{font-size:11px;color:#e7fcff;border:1px solid #5fa7b8;border-radius:4px;background:#204956;padding:6px 10px;cursor:pointer}
+.premove-panel button:disabled{opacity:.45;cursor:default}
+.square.premove-square{box-shadow:inset 0 0 0 5px #63d8ff!important;background:#73bace!important}
+.square.mine-target{outline:3px dashed #ffbd34;outline-offset:-5px;z-index:3}
+.square.mine-target::after{content:'💣';position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(12px,2.5vw,30px);opacity:.8;pointer-events:none}
+.square.mine-square .mine-art{font-size:clamp(13px,2.4vw,27px);position:absolute;right:0;bottom:0;z-index:6;pointer-events:none;filter:drop-shadow(0 0 5px #e65d17)}
+.square.mine-square .mine-counter{position:absolute;bottom:1px;right:2px;font-size:10px;z-index:7;color:#fff;background:#9d2e19;border-radius:7px;padding:1px 3px;pointer-events:none}
+.square.mine-flash{animation:mine-plant .7s ease-out both}
+.square.mine-explosion{animation:mine-blast .9s ease-out both}
+@keyframes mine-plant{0%,35%{filter:brightness(2);box-shadow:inset 0 0 0 9px #ffdd45}100%{filter:none;box-shadow:none}}
+@keyframes mine-blast{0%,25%{filter:brightness(3);box-shadow:inset 0 0 0 25px #f55e26,0 0 36px 18px #ffb921}100%{filter:none;box-shadow:none}}
+.miner-panel{border:1px solid #67604a;background:#302e27;border-radius:5px;margin:10px 0;padding:12px;color:#dbccad}
+.miner-panel h3{font-size:12px;margin:0 0 8px;color:#ffd37c}
+.miner-panel p{font-size:11px;line-height:1.6;margin:0 0 10px;color:#d1c5a9}
+.miner-visual{display:flex;gap:15px}.miner-visual img{height:48px;width:48px}
+@media(prefers-reduced-motion:reduce){.square.mine-flash,.square.mine-explosion{animation:none}}

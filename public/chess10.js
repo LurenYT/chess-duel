@@ -11,7 +11,7 @@
   'use strict';
   const SIZE = 10;
   const MUTATION_CHANCE = 0.05;
-  const MUTATION_TYPES = ['n','b','r','q','s','u']; // No king; UNO still obeys one-card-per-color rule.
+  const MUTATION_TYPES = ['n','b','r','q','s','u','m']; // No king; UNO still obeys one-card-per-color rule.
   const BUFFS = [
     {id:'luck',label:'Золотая удача',description:'Шанс магии пешки 25% вместо 5% на 5 ходов.'},
     {id:'sprint',label:'Спринт пешек',description:'Пешки могут идти на 2 клетки с любой горизонтали (путь свободен).'},
@@ -26,17 +26,17 @@
     {id:'queen',label:'Скованная королева',description:'Ферзь противника ограничен одним шагом в любом направлении.'},
     {id:'pig',label:'Тишина в хлеву',description:'Противник не может активировать свиней.'}
   ];
-  const PRICES={p:1,n:3,b:3,r:5,q:9,s:6,u:6,t:12};
+  const PRICES={p:1,n:3,b:3,r:5,q:9,s:6,u:6,m:5,t:12};
   const EFFECTS=[...BUFFS,...DEBUFFS];
-  const defaultMeta=(ply=0)=>({ply,crate:-1,shopClosed:false,effects:{w:[],b:[]}});
-  const cloneMeta=m=>({ply:m.ply,crate:m.crate,shopClosed:m.shopClosed,
+  const defaultMeta=(ply=0)=>({ply,crate:-1,shopClosed:false,shopSide:'right',mines:[],effects:{w:[],b:[]}});
+  const cloneMeta=m=>({ply:m.ply,crate:m.crate,shopClosed:m.shopClosed,shopSide:m.shopSide||'right',mines:(m.mines||[]).map(x=>({...x})),
     effects:{w:m.effects.w.map(e=>({...e})),b:m.effects.b.map(e=>({...e}))}});
   const hasEffect=(s,who,id)=>!!s.meta?.effects?.[who]?.some(e=>e.id===id && e.remaining>0);
-  const SHOP_ENTRANCES=['j7','j6','j5']; // Shop k6: outside the board, beside j7/j6/j5.
-  const isShopVisitor=(i)=>SHOP_ENTRANCES.some(square=>i===xy(square));
+  const shopEntrances=(side)=>side==='left'?['a7','a6','a5']:['j7','j6','j5'];
+  const isShopVisitor=(i,side)=>shopEntrances(side).some(square=>i===xy(square));
 
   const FILES = 'abcdefghij';
-  const START = '1rnbqkbnr1/pppppppppp/s5u2s/10/10/10/10/S2U5S/PPPPPPPPPP/1RNBQKBNR1 w KQkq - 0 1';
+  const START = '1rnbqkbnr1/pppppppppp/s5um1s/10/10/10/10/S2U3M1S/PPPPPPPPPP/1RNBQKBNR1 w KQkq - 0 1';
   const KNIGHT = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
   const KING = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
   const DIAG = [[-1,-1],[-1,1],[1,-1],[1,1]];
@@ -59,7 +59,7 @@
     if (rows.length !== SIZE) throw Error('Нужны 10 рядов');
     const board = [];
     for (const row of rows) {
-      const tokens = row.match(/10|[1-9]|[prnbqksutPRNBQKSUT]/g);
+      const tokens = row.match(/10|[1-9]|[prnbqksutmPRNBQKSUTM]/g);
       if (!tokens || tokens.join('') !== row) throw Error('Недопустимый символ фигуры');
       const cells = [];
       for (const t of tokens) if (/^\d+$/.test(t)) cells.push(...Array(Number(t)).fill('.')); else cells.push(t);
@@ -68,13 +68,14 @@
     }
     if (board.filter((p)=>p==='K').length!==1 || board.filter((p)=>p==='k').length!==1) throw Error('По одному королю');
     // At most one UNO card per side, including imported positions.
+    if (board.filter(p=>p==='M').length>1 || board.filter(p=>p==='m').length>1)throw Error('На поле может быть не более одного минера каждой команды');
     if (board.filter(p=>p==='U').length>1 || board.filter(p=>p==='u').length>1)
       throw Error('На доске может быть не более одной UNO-карты на команду');
     const rental = {w:null,b:null}; // Temporary color conversions, one per team.
     // Optional 7th field is variant metadata. Regular 6-field positions remain valid.
     if(parts[6] && parts[6] !== '-') {
       for(const token of parts[6].split(';')) {
-        const match=/^([wb]):([prnbqst]):([1-5]):([a-j](?:10|[1-9])):([wb])$/.exec(token);
+        const match=/^([wb]):([prnbqstm]):([1-5]):([a-j](?:10|[1-9])):([wb])$/.exec(token);
         if(!match || rental[match?.[1]])throw Error('Неверные данные временного перекрашивания');
         const owner=match[1], type=match[2], remaining=Number(match[3]), square=xy(match[4]), original=match[5];
         if(original===owner || board[square] !== (owner==='w'?type.toUpperCase():type))
@@ -89,7 +90,7 @@
     const morph = {w:null,b:null};
     if(parts[7] && parts[7] !== '-') {
       for(const token of parts[7].split(';')) {
-        const match=/^([wb]):([nbrqsu]):([a-j](?:10|[1-9]))$/.exec(token);
+        const match=/^([wb]):([nbrqsum]):([a-j](?:10|[1-9]))$/.exec(token);
         if(!match || morph[match?.[1]])throw Error('Неверные данные временного превращения');
         const owner=match[1], type=match[2], square=xy(match[3]);
         if(board[square] !== (owner==='w'?type.toUpperCase():type) || rental[owner]?.square===square)
@@ -106,10 +107,18 @@
       try {data=JSON.parse(decodeURIComponent(parts[8]));}catch {throw Error('Неверные данные ящика/лавки');}
       if(!Number.isSafeInteger(data?.ply)||data.ply<0 ||
         !Number.isInteger(data.crate)||data.crate < -1||data.crate>=100 ||
-        typeof data.shopClosed!=='boolean' || !data.effects ||
+        typeof data.shopClosed!=='boolean' || (data.shopSide!==undefined&&!['left','right'].includes(data.shopSide)) || (data.mines!==undefined&&!Array.isArray(data.mines)) || !data.effects ||
         !Array.isArray(data.effects.w) || !Array.isArray(data.effects.b))
         throw Error('Неверные данные событий');
       meta.ply=data.ply;meta.crate=data.crate;meta.shopClosed=data.shopClosed;
+      meta.shopSide=data.shopSide||'right';
+      if((data.mines||[]).length>40)throw Error('Слишком много мин');
+      for(const mine of data.mines||[]){
+        if(!mine||!['w','b'].includes(mine.owner)||!Number.isInteger(mine.square)||mine.square<0||mine.square>=100||
+          !Number.isInteger(mine.remaining)||mine.remaining<1||mine.remaining>7||
+          meta.mines.some(m=>m.square===mine.square)||board[mine.square].toLowerCase()==='k')throw Error('Неверные данные мины');
+        meta.mines.push({owner:mine.owner,square:mine.square,remaining:mine.remaining});
+      }
       for(const c of ['w','b'])for(const effect of data.effects[c]) {
         if(!EFFECTS.some(e=>e.id===effect.id) || !Number.isInteger(effect.remaining) ||
           effect.remaining<1 || effect.remaining>5 || meta.effects[c].some(e=>e.id===effect.id) ||
@@ -144,7 +153,7 @@
     if(morphs.length)fields.push(extras.join(';')||'-',morphs.join(';'));
     else if(extras.length)fields.push(extras.join(';'));
     if(s.meta && (s.meta.ply!==2*(s.full-1)+(s.turn==='b'?1:0) || s.meta.crate>=0 ||
-      s.meta.shopClosed || s.meta.effects.w.length || s.meta.effects.b.length)) {
+      s.meta.shopClosed || s.meta.shopSide==='left' || s.meta.mines.length || s.meta.effects.w.length || s.meta.effects.b.length)) {
       while(fields.length<8)fields.push('-');
       fields.push(encodeURIComponent(JSON.stringify(s.meta)));
     }
@@ -161,6 +170,9 @@
       } else if (t==='u') {
         // UNO only attacks one square forward (straight or diagonally), never backwards.
         if(tr===r+(by==='w'?-1:1) && Math.abs(tc-c)<=1)return true;
+      } else if(t==='m'){
+        // A miner cannot capture or threaten a king; only planted mines hurt pieces.
+        continue;
       } else if (t==='n' || t==='k' || t==='t') {
         const dirs=t==='k'||t==='t'?KING:hasEffect(s,by,'knight')?[...KNIGHT,...KING]:KNIGHT;
         if (dirs.some(([dr,dc])=>tr===r+dr&&tc===c+dc)) return true;
@@ -194,10 +206,29 @@
       rental[who]=null;
     } else rental[who]={...item,remaining};
   }
+  const backRank=(index,side)=>Math.floor(index/10)===(side==='w'?0:9);
+  function expireMorph(board,morph,who){
+    if(!morph[who])return;
+    const loc=morph[who].square;
+    // A magically evolved pawn reaching the last rank becomes permanent;
+    // it is NOT promoted or randomly mutated again.
+    if(color(board[loc])===who && !backRank(loc,who))board[loc]=who==='w'?'P':'p';
+    morph[who]=null;
+  }
   function apply(s,m) {
     const board=s.board.slice(),piece=board[m.a],taken=board[m.b],who=s.turn,opp=enemy(who);
     const rental={w:s.rental.w&&{...s.rental.w},b:s.rental.b&&{...s.rental.b}};
     const morph={w:s.morph.w&&{...s.morph.w},b:s.morph.b&&{...s.morph.b}};
+    const meta=cloneMeta(s.meta);
+    if(m.flags.includes('M')){
+      // Planting a mine is the miner's action. It stays where it was;
+      // the mine becomes armed for the next seven completed plies.
+      meta.mines.push({owner:who,square:m.b,remaining:8});
+      advanceRental(board,rental,who);
+      expireMorph(board,morph,who);
+      return {board,turn:opp,castle:s.castle,ep:-1,half:s.half+1,
+        full:s.full+(who==='b'?1:0),rental,morph,meta};
+    }
     const epTaken=m.flags.includes('e')?idx(Math.floor(m.a/10),m.b%10):-1;
     const victimSquare=epTaken>=0?epTaken:m.b;
     // Taking a converted figure normally removes it and its conversion timer.
@@ -230,6 +261,17 @@
         }
       }
     }
+    // A launched rocket is a one-use weapon: remove it after the explosion.
+    if(m.flags.includes('L'))board[m.b]='.';
+    // Enemy mines detonate when a piece ENTERS the mined square.
+    // Kings must never be allowed to enter such a square (checked by pseudo).
+    const trap=meta.mines.find(x=>x.square===m.b && x.owner!==who);
+    if(trap){
+      board[m.b]='.';
+      meta.mines=meta.mines.filter(x=>x!==trap);
+      if(rental[who]?.square===m.a)rental[who]=null;
+      if(morph[who]?.square===m.a)morph[who]=null;
+    }
     if(rental[who]?.square===m.a) {
       rental[who]={...rental[who],square:m.b,type:m.promotion||rental[who].type};
     }
@@ -257,22 +299,20 @@
     // Evolution ends when its owner completes ONE subsequent move, even if
     // another piece was moved. If the evolved piece was used, it reverts at
     // its new position; if UNO sacrificed itself, there is nothing to revert.
-    if(morph[who]) {
-      const location=morph[who].square;
-      if(color(board[location])===who)board[location]=who==='w'?'P':'p';
-      morph[who]=null;
-    }
+    expireMorph(board,morph,who);
     // Start at FIVE after the converting move, not four: the card's own move
     // must not count against the next five moves of its new controller.
     if(unoConvert) rental[who]={type:convertedType,remaining:5,square:m.b,original:opp};
     return {board,turn:opp,castle,ep,
-      half:piece.toLowerCase()==='p'||taken!=='.'||m.flags.includes('e')||m.flags.includes('L')?0:s.half+1,
-      full:s.full+(who==='b'?1:0),rental,morph,meta:s.meta};
+      half:piece.toLowerCase()==='p'||taken!=='.'||m.flags.includes('e')||m.flags.includes('L')||trap?0:s.half+1,
+      full:s.full+(who==='b'?1:0),rental,morph,meta};
   }
   function pseudo(s) {
     const moves=[];
     const push=(a,b,flags='')=> {
       if(s.board[b].toLowerCase()==='k')return;
+      if(s.board[a].toLowerCase()==='u' && s.board[b].toLowerCase()==='m' &&
+         s.board.some(p=>p===(s.turn==='w'?'M':'m')))return;
       const piece=s.board[a];
       if(piece.toLowerCase()==='p' && (Math.floor(b/10)===(s.turn==='w'?0:9))) {
         for(const promotion of 'qrbn')moves.push({a,b,flags:flags+'p',promotion});
@@ -303,6 +343,15 @@
           const b=idx(nr,c+dc),occupant=s.board[b];
           if(color(occupant)!==s.turn)push(a,b,occupant!=='.'?'c':'');
         }
+      } else if(p==='m') {
+        for(const [dr,dc] of KING){
+          const nr=r+dr,nc=c+dc;
+          if(inside(nr,nc)&&at(s.board,nr,nc)==='.' &&
+             !s.meta.mines.some(x=>x.square===idx(nr,nc)))push(a,idx(nr,nc));
+          const mr=r+2*dr,mc=c+2*dc;
+          if(inside(mr,mc)&&at(s.board,mr,mc)==='.' &&
+             !s.meta.mines.some(x=>x.square===idx(mr,mc)))push(a,idx(mr,mc),'M');
+        }
       } else if(p==='t') {
         // Adjacent move/capture or three squares straight forward for launch.
         // A rocket cannot land on an occupied square when it launches.
@@ -322,17 +371,21 @@
         const vectors=p==='k'?KING:hasEffect(s,s.turn,'knight')?[...KNIGHT,...KING]:KNIGHT;
         for(const [dr,dc] of vectors) {
           const nr=r+dr,nc=c+dc;
-          if(inside(nr,nc) && color(at(s.board,nr,nc))!==s.turn)push(a,idx(nr,nc),at(s.board,nr,nc)!=='.'?'c':'');
+          if(inside(nr,nc) && color(at(s.board,nr,nc))!==s.turn &&
+             !(p==='k'&&s.meta.mines.some(m=>m.square===idx(nr,nc)&&m.owner!==s.turn)))
+            push(a,idx(nr,nc),at(s.board,nr,nc)!=='.'?'c':'');
         }
         if(p==='k' && c===5 && r===(s.turn==='w'?9:0) && !check(s)) {
           const mine=s.turn==='w'?'R':'r', opponent=enemy(s.turn);
           const home=s.turn==='w'?9:0;
           const shortRight=s.turn==='w'?'K':'k', longRight=s.turn==='w'?'Q':'q';
           if(s.castle.includes(shortRight) && at(s.board,home,8)===mine &&
-             [6,7].every(c=>at(s.board,home,c)==='.' && !attacked(s,idx(home,c),opponent)))push(a,idx(home,7),'k');
+             [6,7].every(c=>at(s.board,home,c)==='.' && !attacked(s,idx(home,c),opponent) &&
+               !s.meta.mines.some(m=>m.square===idx(home,c)&&m.owner===opponent)))push(a,idx(home,7),'k');
           if(s.castle.includes(longRight) && at(s.board,home,1)===mine &&
              [2,3,4].every(c=>at(s.board,home,c)==='.') &&
-             [4,3].every(c=>!attacked(s,idx(home,c),opponent)))push(a,idx(home,3),'q');
+             [4,3].every(c=>!attacked(s,idx(home,c),opponent) &&
+               !s.meta.mines.some(m=>m.square===idx(home,c)&&m.owner===opponent)))push(a,idx(home,3),'q');
         }
       } else {
         if(p==='s'&&hasEffect(s,s.turn,'pig'))continue;
@@ -356,7 +409,7 @@
   // Variant-aware, deterministic 2-ply evaluation. Not a tablebase or proof of
   // optimal play: compares legal moves against the strongest *immediate* reply.
   // No RNG is consumed; effects, UNO conversions and pig movement are simulated.
-  const VALUES={p:100,n:330,b:340,r:510,q:920,s:680,u:570,t:1190,k:0};
+  const VALUES={p:100,n:330,b:340,r:510,q:920,s:680,u:570,m:450,t:1190,k:0};
   // Positional evaluator: material, central control, development, pawn structure,
   // king shelter and the value of controlling open files. All deterministic.
   function boardValue(s,viewer){
@@ -380,7 +433,7 @@
       } else if(type==='r'){
         pos=center*2+(!pawns[owner][col]?25:0)+(!pawns[enemy(owner)][col]?18:0);
       } else if(type==='q')pos=center*3;
-      else if(type==='s'||type==='u'||type==='t')pos=center*4+advance*2;
+      else if(type==='s'||type==='u'||type==='t'||type==='m')pos=center*4+advance*2;
       else if(type==='k') {
         // Reward king shelter before the endgame and centralization later.
         const endgame=occupied.filter(x=>['q','Q','r','R','t','T'].includes(x)).length<3;
@@ -490,6 +543,7 @@
     const caught=VALUES[record.captured]||0;
     const tactical=(record.brilliant?1000:0)+(record.type==='trade'?220:0)+
       (record.launch?400+record.launch.victims.reduce((n,v)=>n+Math.round((VALUES[v.type]||0)*0.4),0):0)+
+      (record.mineDetonated?300+Math.round((VALUES[record.mineDetonated.victim]||0)*.5):0)+
       Math.round(caught*.63)+(record.morph?180:0)+(record.crateCollected?180:0)+
       (record.crateSpawn?40:0)+(record.type==='u'&&record.captured?260:0)+
       (check(next)?240:0)+(check(next)&&legal(next).length===0?1900:0);
@@ -503,12 +557,13 @@
     else if(m.flags.includes('q'))notation='O-O-O';
     else {
       if(t!=='p') {
-        notation=t==='s'?'🐷':t==='u'?'🃏':t==='t'?'🚀':t.toUpperCase();
+        notation=t==='s'?'🐷':t==='u'?'🃏':t==='t'?'🚀':t==='m'?'💣':t.toUpperCase();
         const others=all.filter(x=>x.a!==m.a && x.b===m.b && s.board[x.a]===s.board[m.a]);
         if(others.length) notation+= !others.some(x=>x.a%10===m.a%10)?f[0]
           :!others.some(x=>Math.floor(x.a/10)===Math.floor(m.a/10))?f.slice(1):f;
       } else if(m.flags.includes('c')||m.flags.includes('e'))notation=f[0];
       if(m.flags.includes('c')||m.flags.includes('e'))notation+='x';
+      if(m.flags.includes('M'))notation='💣'+f+'→'+to;
       notation+=to;
       if(m.promotion)notation+='='+m.promotion.toUpperCase();
     }
@@ -516,9 +571,9 @@
     if(check(next))notation+=legal(next).length?'+':'#';
     return notation;
   }
-  function positionKey(s) {return s.board.join('')+'|'+s.turn+'|'+s.castle+'|'+(s.ep>=0 && legal(s).some(m=>m.flags.includes('e'))?s.ep:'-')+'|'+JSON.stringify(s.rental)+'|'+JSON.stringify(s.morph)+'|'+JSON.stringify({crate:s.meta.crate,shopClosed:s.meta.shopClosed,effects:s.meta.effects});}
+  function positionKey(s) {return s.board.join('')+'|'+s.turn+'|'+s.castle+'|'+(s.ep>=0 && legal(s).some(m=>m.flags.includes('e'))?s.ep:'-')+'|'+JSON.stringify(s.rental)+'|'+JSON.stringify(s.morph)+'|'+JSON.stringify({crate:s.meta.crate,shopClosed:s.meta.shopClosed,shopSide:s.meta.shopSide,mines:s.meta.mines,effects:s.meta.effects});}
   function insufficient(s) {
-    if(['w','b'].some(c=>s.rental[c]||s.morph[c]))return false;
+    if(['w','b'].some(c=>s.rental[c]||s.morph[c]) || s.meta.mines.length)return false;
     const pieces=s.board.map((p,i)=>[p.toLowerCase(),(Math.floor(i/10)+i%10)%2])
       .filter(([p])=>p!=='.' && p!=='k');
     return pieces.length===0 || (pieces.length===1 && ['b','n'].includes(pieces[0][0])) ||
@@ -572,9 +627,11 @@
   }
   function postAction(game,next,who,record,collectedAt=-1) {
     next.meta=cloneMeta(next.meta);
+    // Mines lose one charge on each completed move by either player.
+    next.meta.mines=next.meta.mines.map(m=>({...m,remaining:m.remaining-1})).filter(m=>m.remaining>0);
     tickEffects(next.meta,who);
     next.meta.ply++;
-    if(collectedAt>=0&&next.meta.crate===collectedAt)activateCrate(next,who,()=>game._roll(),record);
+    if(collectedAt>=0&&next.board[collectedAt]!=='.'&&color(next.board[collectedAt])===who&&next.meta.crate===collectedAt)activateCrate(next,who,()=>game._roll(),record);
     if(next.meta.ply%30===0)record.crateSpawn=putCrate(next,()=>game._roll());
     if(next.meta.ply===50)record.shopOpened=true;
   }
@@ -623,8 +680,15 @@
     ply(){return this._s.meta.ply;}
     crate(){return this._s.meta.crate>=0?name(this._s.meta.crate):null;}
     effects(){return JSON.parse(JSON.stringify(this._s.meta.effects));}
-    shop(){return {open:this.ply()>=50&&!this._s.meta.shopClosed,
-      closed:this._s.meta.shopClosed,opensAt:50,entrance:'j6',entrances:[...SHOP_ENTRANCES],tile:'k6',prices:{...PRICES}};}
+    shop(){const side=this._s.meta.shopSide||'right';return {open:this.ply()>=50&&!this._s.meta.shopClosed,
+      closed:this._s.meta.shopClosed,opensAt:50,side,entrance:side==='left'?'a6':'j6',
+      entrances:shopEntrances(side),tile:side==='left'?'←a6':'k6',prices:{...PRICES}};}
+    setShopSide(side){
+      if(!['left','right'].includes(side)||this.ply()>0)throw Error('Сторону лавки можно выбрать только перед началом партии');
+      this._s.meta.shopSide=side;
+      this._repeats=new Map([[positionKey(this._s),1]]);
+    }
+    mines(){return this._s.meta.mines.map(m=>({...m,square:name(m.square)}));}
     threatened(by){const squares=[];for(let i=0;i<100;i++)if(attacked(this._s,i,by))squares.push(name(i));return squares;}
     rentals() {return Object.fromEntries(['w','b'].map(c=>[c,this._s.rental[c]&&{
       type:this._s.rental[c].type,remaining:this._s.rental[c].remaining,
@@ -658,15 +722,23 @@
       const previous=before.morph[before.turn];
       const record={from:move.from,to:move.to,color:before.turn,type:before.board[m.a].toLowerCase(),
         flags:m.flags,promotion:m.promotion,captured:m.flags.includes('e')?'p':before.board[m.b]==='.'?null:before.board[m.b].toLowerCase()};
-      if(m.flags.includes('L'))record.launch={from:name(m.a),to:name(m.b),victims:blastVictims(before,m.b)};
+      if(m.flags.includes('L'))record.launch={from:name(m.a),to:name(m.b),victims:blastVictims(before,m.b),consumed:true};
+      if(m.flags.includes('M'))record.minePlaced={square:move.to,owner:before.turn,duration:7};
+      const trap=before.meta.mines.find(x=>x.square===m.b && x.owner!==before.turn);
+      if(trap)record.mineDetonated={square:move.to,victim:record.type,owner:trap.owner};
       const next=apply(before,m); // deterministic simulation; never roll in legal() / apply()
-      if(previous)record.morphExpired={type:previous.type,square:name(previous.square),color:before.turn};
+      if(previous){
+        const endpoint=previous.square===m.a?m.b:previous.square;
+        if(color(next.board[endpoint])===before.turn && backRank(endpoint,before.turn))record.morphLocked={type:previous.type,square:name(endpoint),color:before.turn};
+        else record.morphExpired={type:previous.type,square:name(previous.square),color:before.turn};
+      }
       // 5% probability for every non-promotion pawn move, including double steps
       // and captures. Only actual committed moves roll; online server owns the RNG.
       if(record.type==='p' && !m.promotion && color(next.board[m.b])===before.turn && next.board[m.b].toLowerCase()==='p') {
         if(this._roll()<(hasEffect(before,before.turn,'luck')?0.25:MUTATION_CHANCE)) {
           const available=MUTATION_TYPES.filter(type=>type!=='u' ||
-            !next.board.includes(before.turn==='w'?'U':'u'));
+            !next.board.includes(before.turn==='w'?'U':'u'))
+            .filter(type=>type!=='m'||!next.board.includes(before.turn==='w'?'M':'m')); 
           const type=available[Math.floor(this._roll()*available.length)];
           next.board[m.b]=before.turn==='w'?type.toUpperCase():type;
           next.morph[before.turn]={type,square:m.b};
@@ -699,8 +771,8 @@
       const before=this._s,who=before.turn,meta=before.meta;
       if(meta.ply<50||meta.shopClosed)throw Error('Лавка закрыта (открывается на 50-м полуходе)');
       const visit=xy(visitor),piece=before.board[visit];
-      if(!isShopVisitor(visit)||color(piece)!==who||!PRICES[piece.toLowerCase()])
-        throw Error('К лавке k6 должна подойти ваша фигура (кроме короля) на j5, j6 или j7');
+      if(!isShopVisitor(visit,meta.shopSide)||color(piece)!==who||!PRICES[piece.toLowerCase()])
+        throw Error('К лавке k6 (или к её зеркальному входу) должна подойти своя фигура на соседней клетке (кроме короля)');
       if(!Array.isArray(sacrifice)||sacrifice.length!==3 || new Set(sacrifice).size!==3 ||
         !sacrifice.includes(visitor) || !PRICES[receive])
         throw Error('Выберите ровно 3 фигуры, включая посетителя лавки, и награду');
@@ -711,7 +783,7 @@
       // A temporarily evolved pawn is only worth a pawn, never a free queen.
       const value=offerings.reduce((sum,p,i)=>sum+(before.morph[who]?.square===indexes[i]?PRICES.p:PRICES[p.toLowerCase()]),0);
       if(PRICES[receive]>value)throw Error(`Недостаточно ценности: ${value} < ${PRICES[receive]}`);
-      if(receive==='u' && before.board.some((p,i)=>p===(who==='w'?'U':'u') && !indexes.includes(i)))
+      if(['u','m'].includes(receive) && before.board.some((p,i)=>p===(who==='w'?receive.toUpperCase():receive) && !indexes.includes(i)))
         throw Error('У вас уже есть UNO-карта');
       const next={...before,board:before.board.slice(),turn:enemy(who),
         full:before.full+(who==='b'?1:0),half:0,ep:-1,
@@ -734,12 +806,8 @@
       }else next.board[visit]=who==='w'?receive.toUpperCase():receive;
       // Remove effects that would expire on this move and then test real king safety.
       advanceRental(next.board,next.rental,who);
-      if(next.morph[who]) {
-        const square=next.morph[who].square;
-        if(next.board[square]!=='.'&&color(next.board[square])===who)
-          next.board[square]=who==='w'?'P':'p';
-        next.morph[who]=null;
-      }
+      expireMorph(next.board,next.morph,who);
+      next.meta.mines=next.meta.mines.filter(m=>!indexes.includes(m.square));
       next.meta.shopClosed=true;
       const record={type:'trade',color:who,from:visitor,to:visitor,san:`🛒 ${sacrifice.join('+')} → ${receive.toUpperCase()}`,
         trade:{visitor,sacrifice:[...sacrifice],receive,value,spawn:rocketSquare},brilliant:false,analysis:null};
@@ -764,7 +832,7 @@
         number:i+1,index:item.index,score:item.impact,durationMs:3000,
         before:toFen(this._states[item.index]),after:toFen(this._states[item.index+1]),
         record:{...item.record},title:item.record.brilliant?'💎 Бриллиантовый ход':
-          item.record.launch?'🚀 Ракетный удар':item.record.trade?'🏪 Сделка у торговца':item.record.crateCollected?'🎁 Сундук открыт':
+          item.record.mineDetonated?'💥 Мина сработала':item.record.minePlaced?'💣 Минное поле':item.record.launch?'🚀 Ракетный удар':item.record.trade?'🏪 Сделка у торговца':item.record.crateCollected?'🎁 Сундук открыт':
           item.record.morph?'✨ Волшебное превращение':item.record.captured?'⚔️ Решающее взятие':
           item.record.crateSpawn?'🎁 Появление ящика':'♟️ Важная позиция',
         label:item.record.san

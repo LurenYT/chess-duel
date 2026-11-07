@@ -36,8 +36,10 @@ const safeName = (name) => typeof name === 'string'
 
 function createRoom() {
   if (rooms.size >= MAX_ROOMS) throw new Error('Сейчас слишком много комнат. Попробуйте позже.');
+  const newGame=new Chess10(undefined,secureRandom);
+  newGame.setShopSide(secureRandom()<.5?'left':'right');
   const room = {
-    code: code(), game: new Chess10(undefined, secureRandom), players: { w: null, b: null },
+    code: code(), game: newGame, players: { w: null, b: null },
     started: false, result: null, drawOffer: null, rematch: new Set(),
     clock: { w: INITIAL_TIME, b: INITIAL_TIME, activeAt: null },
     createdAt: Date.now(), updatedAt: Date.now()
@@ -232,7 +234,7 @@ io.on('connection', (socket) => {
     if(!payload || typeof payload.visitor!=='string' ||
        !Array.isArray(payload.sacrifice) || payload.sacrifice.length!==3 ||
        payload.sacrifice.some(x=>typeof x!=='string' || !/^[a-j](10|[1-9])$/.test(x)) ||
-       !/^[pnbrqsut]$/.test(payload.receive||''))
+       !/^[pnbrqsutm]$/.test(payload.receive||''))
       return reply({ok:false,error:'Неверный формат сделки'});
     commitPlayerMove(socket, reply, game=>game.trade(payload));
   });
@@ -279,6 +281,7 @@ io.on('connection', (socket) => {
       room.rematch.add(color);
       if (room.rematch.size === 2) {
         room.game = new Chess10(undefined, secureRandom);
+        room.game.setShopSide(secureRandom()<.5?'left':'right');
         room.result = null;
         room.drawOffer = null;
         room.rematch.clear();
