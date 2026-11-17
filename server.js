@@ -229,7 +229,9 @@ io.on('connection', (socket) => {
   socket.on('game:move', (payload = {}, reply = () => {}) => {
     if (!payload || typeof payload.from !== 'string' || typeof payload.to !== 'string'
       || !/^[a-j](10|[1-9])$/.test(payload.from) || !/^[a-j](10|[1-9])$/.test(payload.to)
-      || (payload.promotion !== undefined && !/^[qrbn]$/.test(payload.promotion))) {
+      || (payload.promotion !== undefined && !/^[qrbn]$/.test(payload.promotion))
+      || (payload.path !== undefined && (!Array.isArray(payload.path) || payload.path.length<2 || payload.path.length>13
+        || payload.path.some(s=>typeof s!=='string'||!/^[a-h][1-8]$/.test(s))))) {
       return reply({ ok: false, error: 'Неверный формат хода.' });
     }
     commitPlayerMove(socket, reply, game => game.move(payload));

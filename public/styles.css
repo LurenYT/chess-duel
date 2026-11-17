@@ -495,3 +495,6 @@ footer{display:none}
 .draughts-mode .square.can-capture::after{content:'';position:absolute;inset:12%;border:4px solid #f5c165;border-radius:50%;pointer-events:none}
 .draughts-mode .board-section{isolation:isolate}
 [hidden]{display:none!important}
+.combo-choices{display:grid;gap:8px;max-height:55vh;overflow:auto;margin:15px 0}
+.combo-choices button{background:#35452c;color:#edf5df;border:1px solid #8da962;border-radius:6px;padding:12px;cursor:pointer;font-size:14px;text-align:left}
+.combo-choices button:hover,.combo-choices button:focus-visible{background:#58713c;outline:2px solid #b8d488}

@@ -91,7 +91,7 @@
             <div class="clock" id="bottomClock">10:00</div>
           </div>
 
-          <div class="board-footnote"><span id="chessFootnote"><span>✦</span> 🎁 Ящик через каждые 30 полуходов, собери фигурой! 🏪 Одна общая лавка у левого или правого края: приведи фигуру к её стороне и обменяй 3 на 1. ✨ Пешки могут временно превращаться. </span><span id="draughtsFootnote" hidden>Взятие обязательно · Дамка: ♛ на шашке · Одно взятие — и ход соперника. </span><span id="orientationLabel">Белые снизу</span></div>
+          <div class="board-footnote"><span id="chessFootnote"><span>✦</span> 🎁 Ящик через каждые 30 полуходов, собери фигурой! 🏪 Одна общая лавка у левого или правого края: приведи фигуру к её стороне и обменяй 3 на 1. ✨ Пешки могут временно превращаться. </span><span id="draughtsFootnote" hidden>Комбо вперёд и назад: выберите конечную клетку цепочки. После хода очередь соперника. </span><span id="orientationLabel">Белые снизу</span></div>
         </section>
 
         <aside class="match-panel">
@@ -106,7 +106,7 @@
             <p id="statusDescription">Сделайте первый ход, чтобы начать партию.</p>
           </div>
 
-          <div class="draughts-rules" id="draughtsRules" hidden><h3>Русские шашки · 8×8</h3><p>Простая шашка ходит вперёд на одну клетку по диагонали, бьёт вперёд и назад. Дамка ходит и бьёт по всей свободной диагонали.</p><p><b>Взятие обязательно.</b> После одного взятия ход сразу переходит сопернику, даже если той же шашкой можно побить ещё.</p><p>Достигнув последней горизонтали, шашка сразу становится дамкой. Побитая фигура убирается сразу; превращение не даёт дополнительного хода.</p></div>
+          <div class="draughts-rules" id="draughtsRules" hidden><h3>Русские шашки · 8×8</h3><p>Простая шашка ходит вперёд на одну клетку по диагонали, бьёт вперёд и назад. Дамка ходит и бьёт по всей свободной диагонали.</p><p><b>Взятие обязательно.</b> Для комбо выберите конечную клетку цепочки: шашка может менять направление и бить назад. Если к клетке ведут разные пути, выберите маршрут.</p><p>Можно остановиться после первого взятия. После выбранного хода очередь сразу переходит сопернику, второго хода подряд нет. На последней горизонтали шашка сразу становится дамкой и может продолжить выбранное комбо как дамка. Побитые фигуры до конца комбо перекрывают диагонали.</p></div>
           <div class="premove-panel" id="premovePanel" hidden>
             <strong>⏳ ПРЕДХОД</strong><p id="premoveInfo">Пока соперник думает, можно подготовить ход своей фигуры.</p>
             <button id="premoveCancel" type="button" disabled>Отменить предход</button>
@@ -171,6 +171,7 @@
       <small>5 лучших моментов по 3 секунды, если в партии было хотя бы 5 ходов. Музыка — из оригинального трека.</small></div>
     </div>
   </div>
+  <div id="comboModal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="comboTitle"><div class="confirm-modal"><h2 id="comboTitle">Выберите маршрут комбо</h2><div id="comboChoices" class="combo-choices"></div><button id="cancelCombo" class="modal-cancel" type="button">Отмена</button></div></div>
   <div id="promotionModal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="promotionTitle">
     <div class="promotion-modal"><div class="section-eyebrow">ПОСЛЕДНЯЯ ГОРИЗОНТАЛЬ</div><h2 id="promotionTitle">Выберите превращение</h2><div id="promotionChoices" class="promotion-choices"></div><button id="cancelPromotion" class="modal-cancel" type="button">Отмена</button></div>
   </div>

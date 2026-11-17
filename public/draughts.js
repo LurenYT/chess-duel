@@ -55,11 +55,42 @@
       }
       return result;
     }
+    _captureRoutes(from) {
+      const saved=this._s, result=[];
+      this._s=copy(saved);
+      const first=this.get(from);
+      const visit=(at,path,hops)=>{
+        for(const step of this._captures(at)) {
+          const piece=this.get(at);
+          delete this._s.board[at];
+          const crowned=piece.type==='d' && Number(step.to[1])===(piece.color==='w'?8:1);
+          this._s.board[step.to]={...piece,type:crowned?'v':piece.type};
+          this._s.taken.push(step.capturedSquare);
+          const nextPath=[...path,step.to],nextHops=[...hops,{...step,crowned}];
+          // Every prefix is selectable: stopping early ends the player's turn.
+          result.push({from,to:step.to,color:first.color,type:first.type,flags:'c',
+            captured:nextHops[0].captured,capturedSquare:nextHops[0].capturedSquare,
+            capturedSquares:nextHops.map(h=>h.capturedSquare),path:nextPath,hops:nextHops,
+            crowned:nextHops.some(h=>h.crowned)});
+          visit(step.to,nextPath,nextHops);
+          this._s.taken.pop();
+          delete this._s.board[step.to];
+          this._s.board[at]=piece;
+        }
+      };
+      try { visit(from,[from],[]); } finally { this._s=saved; }
+      return result;
+    }
     moves({square:from,verbose=false}={}) {
       if (this.isDraw()) return [];
       const owned=Object.keys(this._s.board).filter(s=>this.get(s).color===this.turn() && !this._s.taken.includes(s));
       const origins=this._s.chain?[this._s.chain]:owned;
       let result=origins.flatMap(s=>this._captures(s));
+      if(result.length) {
+        const capturing=[...new Set(result.map(m=>m.from))].filter(s=>from===undefined||s===from);
+        result=capturing.flatMap(s=>this._captureRoutes(s));
+        return verbose?result:result.map(m=>m.path.join('×'));
+      }
       if (!result.length && !this._s.chain) {
         for (const s of owned) {
           const p=this.get(s),x=FILES.indexOf(s[0]),y=Number(s[1]);
@@ -80,15 +111,20 @@
     move(payload={}) {
       const {from,to}=payload;
       if (!valid(from) || !valid(to) || payload.promotion!==undefined || this.isDraw()) throw Error('Недопустимый ход шашки');
-      const legal=this.moves({square:from,verbose:true}).find(m=>m.to===to);
+      const route=payload.path;
+      if(route!==undefined && (!Array.isArray(route)||route.length<2||route.length>13||route.some(s=>!valid(s))||route[0]!==from||route.at(-1)!==to)) throw Error('Неверный маршрут комбо');
+      const candidates=this.moves({square:from,verbose:true}).filter(m=>m.to===to &&
+        (route===undefined || JSON.stringify(m.path||[m.from,m.to])===JSON.stringify(route)));
+      if(candidates.length>1) throw Error('Выберите маршрут комбо');
+      const legal=candidates[0];
       if (!legal) throw Error(this._s.chain?'Продолжите взятие той же шашкой':'Недопустимый ход: при наличии взятия нужно бить');
       const before=this.fen(), p=this.get(from), wasKing=p.type==='v';
       delete this._s.board[from];
-      if (legal.capturedSquare) this._s.taken.push(legal.capturedSquare);
-      if (p.type==='d' && Number(to[1])===(p.color==='w'?8:1)) p.type='v';
+      this._s.taken.push(...(legal.capturedSquares||[]));
+      if (legal.crowned || p.type==='d' && Number(to[1])===(p.color==='w'?8:1)) p.type='v';
       this._s.board[to]=p;
       const crowned=!wasKing && p.type==='v';
-      // House rule: one capture ends the turn, even if another is available.
+      // One selected route is one turn. An unplayed continuation is forfeited.
       const captured=this._s.taken.length>0;
       for (const s of this._s.taken) delete this._s.board[s];
       this._s.taken=[];
@@ -98,7 +134,7 @@
       this._s.ply++;
       this._remember();
       const record={...legal,crowned,continued:false,turnNumber:this._s.ply,
-        san:from+(legal.captured?'×':'–')+to+(crowned?' Д':''),before,after:this.fen()};
+        path:legal.path||[from,to],san:(legal.path||[from,to]).join(legal.captured?'×':'–')+(crowned?' Д':''),before,after:this.fen()};
       this._moves.push(record);
       return copy(record);
     }

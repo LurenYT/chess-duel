@@ -87,8 +87,54 @@ test('reloading after capture cannot restore the capturing player turn',()=>{
 });
 test('there is no longest-capture requirement: both initial branches are legal',()=>{
   const g=position({c3:'wd',b4:'bd',d4:'bd',f6:'bd',h8:'bd'});
-  assert.deepEqual(destinations(g,'c3'),['a5','e5']);
+  assert.deepEqual(destinations(g,'c3'),['a5','e5','g7']);
   g.move({from:'c3',to:'a5'});assert.equal(g.turn(),'b');
+});
+test('white man combos forward then backwards as one turn, or may stop after the first capture',()=>{
+  const g=position({c3:'wd',d4:'bd',f4:'bd',h8:'bd'}),before=g.fen();
+  const route=g.moves({square:'c3',verbose:true}).find(m=>m.to==='g3');
+  assert.deepEqual(route.path,['c3','e5','g3']);assert.equal(g.fen(),before);
+  const made=g.move(route);
+  assert.equal(g.get('g3').type,'d');assert.equal(g.get('d4'),null);assert.equal(g.get('f4'),null);
+  assert.equal(g.turn(),'b');assert.equal(g.ply(),1);assert.equal(g.history().length,1);
+  assert.equal(made.san,'c3×e5×g3');assert.equal(made.hops.length,2);
+  const partial=new RussianDraughts(before);partial.move({from:'c3',to:'e5'});
+  assert.equal(partial.turn(),'b');assert.equal(partial.get('f4').color,'b');
+  assert.throws(()=>partial.move({from:'e5',to:'g3'}));
+});
+test('black man can reverse upwards during a combo',()=>{
+  const g=position({f6:'bd',e5:'wd',c5:'wd',a1:'wd'},'b');
+  const made=g.move({from:'f6',to:'b6',path:['f6','d4','b6']});
+  assert.equal(made.hops.length,2);assert.equal(g.turn(),'w');assert.equal(g.ply(),1);
+  assert.equal(g.get('e5'),null);assert.equal(g.get('c5'),null);
+});
+test('a flying king combos at distance and reverses direction',()=>{
+  const g=position({a1:'wv',d4:'bd',f4:'bd',h8:'bd'});
+  g.move({from:'a1',to:'h2',path:['a1','e5','h2']});
+  assert.equal(g.get('h2').type,'v');assert.equal(g.get('d4'),null);assert.equal(g.get('f4'),null);
+  assert.equal(g.turn(),'b');
+});
+test('promotion inside a selected combo continues as a flying king immediately',()=>{
+  const g=position({b6:'wd',c7:'bd',f6:'bd',h8:'bd'});
+  const made=g.move({from:'b6',to:'h4',path:['b6','d8','h4']});
+  assert.equal(made.crowned,true);assert.equal(made.hops[0].crowned,true);assert.equal(made.hops[1].type,'v');
+  assert.equal(g.get('h4').type,'v');assert.equal(g.get('c7'),null);assert.equal(g.get('f6'),null);
+  assert.equal(g.turn(),'b');assert.equal(g.ply(),1);
+});
+test('a combo cannot cross a victim it has already captured',()=>{
+  const g=position({c3:'wv',d4:'bd',b2:'bd',h8:'bd'});
+  assert.ok(g.moves({verbose:true}).every(m=>m.hops.length===1));
+  assert.throws(()=>g.move({from:'c3',to:'a1',path:['c3','e5','a1']}));
+});
+test('ambiguous endpoints require the chosen path and reject fabricated routes without mutating the board',()=>{
+  const g=position({c3:'wv',d4:'bd',f4:'bd',f2:'bd',d2:'bd',h8:'bd'}),before=g.fen();
+  assert.ok(g.moves({square:'c3',verbose:true}).filter(m=>m.to==='g3').length>1);
+  assert.throws(()=>g.move({from:'c3',to:'g3'}),/маршрут/);
+  assert.throws(()=>g.move({from:'c3',to:'g3',path:['c3','g3']}));
+  assert.throws(()=>g.move({from:'c3',to:'g3',path:['c3','e5','i9','g3']}));
+  assert.equal(g.fen(),before);
+  g.move({from:'c3',to:'g3',path:['c3','e5','g3']});
+  assert.equal(g.get('d4'),null);assert.equal(g.get('f4'),null);assert.equal(g.get('d2').color,'b');
 });
 test('no pieces or no legal moves is a loss, not a drawn stalemate',()=>{
   const g=position({a1:'wd'} ,'b');

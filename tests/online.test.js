@@ -120,6 +120,28 @@ test('online match: join, legal move, validation, turn and resign', async () => 
   assert.equal(rooms.get(made.code).game.history().length, 0);
 });
 
+test('online backwards combo commits once, synchronizes its path and prevents a second turn',async()=>{
+  const {RussianDraughts}=require('../public/draughts');
+  const w=await client(),b=await client(),made=await request(w,'room:create',{variant:'russian'});
+  await request(b,'room:join',{code:made.code});
+  const room=rooms.get(made.code);
+  room.game=new RussianDraughts('RD1:'+JSON.stringify({board:{c3:{color:'w',type:'d'},d4:{color:'b',type:'d'},f4:{color:'b',type:'d'},h8:{color:'b',type:'d'}},turn:'w',chain:null,taken:[],ply:0,quiet:0,repetitions:{}}));
+  const synced=new Promise(resolve=>b.on('room:state',state=>{if(state.moves.length===1)resolve(state);}));
+  const before=room.game.fen();
+  for(const path of [null,'c3,e5,g3',['c3','g3'],['c3','e5','i9','g3'],Array(14).fill('c3')]){
+    assert.equal((await request(w,'game:move',{from:'c3',to:'g3',path})).ok,false);
+    assert.equal(room.game.fen(),before);
+  }
+  assert.equal((await request(w,'game:move',{from:'c3',to:'g3',path:['c3','e5','g3']})).ok,true);
+  assert.equal(room.game.ply(),1);assert.equal(room.game.turn(),'b');assert.equal(room.game.history().length,1);
+  assert.equal(room.game.get('d4'),null);assert.equal(room.game.get('f4'),null);
+  const broadcast=await synced;
+  assert.deepEqual(broadcast.moves[0].path,['c3','e5','g3']);
+  assert.equal(new RussianDraughts(broadcast.fen).get('g3').color,'w');
+  assert.equal((await request(w,'game:move',{from:'g3',to:'h4'})).ok,false);
+  assert.equal((await request(b,'game:move',{from:'h8',to:'g7'})).ok,true);
+});
+
 test('seat token allows reconnecting to the same color', async () => {
   const first = await client();
   const created = await request(first, 'room:create', { name: 'Первый' });

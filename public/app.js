@@ -151,6 +151,7 @@ function resetSelection() {
   selected = null;
   promotionOptions = null;
   $('promotionModal').hidden = true;
+  $('comboModal').hidden = true;
 }
 
 function trySquare(square) {
@@ -174,6 +175,7 @@ function trySquare(square) {
     if(!isDraughts()&&candidates.length>1&&candidates.some(move=>move.promotion)){
       promotionOptions=candidates;showPromotion(candidates);return;
     }
+    if(isDraughts() && candidates.length>1){showComboRoutes(candidates);return;}
     if(candidates.length===1){
       if(pre)queuePremove(candidates[0]);else submitMove(candidates[0]);
       return;
@@ -182,6 +184,17 @@ function trySquare(square) {
   if(piece?.color===active){selected=selected===square?null:square;}
   else selected=null;
   renderBoard();
+}
+
+function showComboRoutes(options) {
+  const choices=$('comboChoices');choices.replaceChildren();
+  for(const move of options){
+    const button=document.createElement('button');button.type='button';
+    button.textContent=`${move.path.join(' → ')} · взятий: ${move.capturedSquares.length}`;
+    button.onclick=()=>{if(canMove())submitMove(move);else resetSelection();};
+    choices.append(button);
+  }
+  $('comboModal').hidden=false;
 }
 
 function showPromotion(options) {
@@ -206,6 +219,7 @@ function showPromotion(options) {
 function submitMove(move) {
   if(canPremove()){queuePremove(move);return;}
   const payload = { from: move.from, to: move.to };
+  if(isDraughts() && move.path)payload.path=move.path;
   if (move.promotion) payload.promotion = move.promotion;
   resetSelection();
   if (mode === 'local') {
@@ -608,7 +622,7 @@ function statusInfo() {
     const g=game();
     if(mode==='local' && g.isGameOver()) return ['ПАРТИЯ ОКОНЧЕНА',g.isDraw()?'Ничья':`${g.turn()==='w'?'Чёрные':'Белые'} победили`,g.isDraw()?'Троекратное повторение или 15 ходов каждой стороны дамками без взятия.':'У соперника нет шашек или допустимых ходов.','finished'];
     const capture=g.moves({verbose:true}).some(m=>m.captured);
-    return ['РУССКИЕ ШАШКИ',`Ход ${g.turn()==='w'?'белых':'чёрных'}`,capture?'Есть обязательное взятие. После него ход перейдёт сопернику.':'Выберите свою шашку и клетку назначения.','playing'];
+    return ['РУССКИЕ ШАШКИ',`Ход ${g.turn()==='w'?'белых':'чёрных'}`,capture?'Есть взятие. Для комбо выберите конечную клетку цепочки, в том числе назад.':'Выберите свою шашку и клетку назначения.','playing'];
   }
   if (mode === 'online') {
     if (!socket?.connected) return ['СОЕДИНЕНИЕ ПОТЕРЯНО', 'Нет связи с сервером', 'Переподключение произойдёт автоматически.', 'waiting'];
@@ -1010,6 +1024,15 @@ function brilliantEffect(record){
 
 function presentMove(record,optimistic=false) {
   if (!record) return;
+  if(record.hops?.length>1){
+    // Animate the chosen route, rather than flying straight to its last square.
+    const total=record.hops.length,expected=game().fen();
+    record.hops.forEach((hop,index)=>setTimeout(()=>{
+      if(isDraughts() && game().fen()===expected)presentMove({...hop,hops:null,from:hop.from,to:hop.to},optimistic);
+    },index*470));
+    toast(`Комбо ×${total}: ${record.path.join(' → ')}`);
+    musicUpdate();return;
+  }
   if(record.trade){
     playSound(record.trade.receive==='t'?'rocket':'trade');
     if(record.trade.receive==='t'){
@@ -1217,7 +1240,7 @@ document.addEventListener('pointerup', (event) => {
     ignoreClickUntil=Date.now()+240;
     selected=start;
     if(inShop)showShop(start);
-    else if (target && target!==start) trySquare(target);
+    else if (target && (target!==start || isDraughts())) trySquare(target);
     else renderBoard();
   }
 });
@@ -1259,6 +1282,7 @@ $('copyLinkBtn').addEventListener('click', () => {
   copyText(url.toString(), 'Ссылка на матч скопирована.');
 });
 $('cancelPromotion').addEventListener('click', () => { resetSelection(); renderBoard(); });
+$('cancelCombo').addEventListener('click',()=>{resetSelection();renderBoard();});
 $('confirmCancel').addEventListener('click', () => { $('confirmModal').hidden = true; });
 $('resignBtn').addEventListener('click', () => askConfirm('Сдаться в партии?', 'Сопернику будет засчитана победа. Отменить это действие невозможно.', () => sendAction('game:resign')));
 $('drawBtn').addEventListener('click', () => sendAction('game:draw'));
