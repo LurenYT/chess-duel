@@ -64,7 +64,7 @@
       <section class="page-heading">
         <div>
           <div class="kicker"><span class="kicker-bar"></span> YOUR NEXT MOVE</div>
-          <h1>CHESS DUEL 9.0 <em>Minefield Update</em></h1>
+          <h1>CHESS DUEL <em>Новая армия</em></h1>
           <p>Ящики каждые 30 ходов, лавка k6 после 50-го, бриллиантовые комбинации и кинематографические повторы после матча. 🎶 Музыка включается после первого хода.</p>
         </div>
         <div class="heading-deco" aria-hidden="true">♞</div>
@@ -120,8 +120,9 @@
           <div class="moves-heading"><h3>История ходов</h3><span id="moveCounter">0 ХОДОВ</span></div>
           <div class="moves-area" id="movesArea"><div class="empty-moves"><span>♙</span><p>Здесь появятся ходы<br>вашей партии</p></div></div>
 
+          <section class="new-army-panel"><div class="army-heading"><h3>Новая армия · 5 фигур</h3><a href="/pieces.html" target="_blank" rel="noopener">Все фигуры ↗</a></div><p>По одной новой фигуре у каждой стороны с начала партии. Дополнительные можно купить в лавке.</p><div id="newPiecesList"></div></section>
           <div class="crate-panel"><div class="crate-panel-title"><span>🎁 СЛУЧАЙНЫЙ ЯЩИК</span><strong id="crateCountdown">до 30-го хода</strong></div><p id="crateDescription">Первый ящик появится на 30-м полуходе, дальше — каждые 30. Займи клетку ящика своей фигурой! Шанс получить ракету — 2%.</p><div id="effectsList" class="effects-list"></div><details><summary>Все 5 усилений и 5 помех</summary><div id="effectCatalog"></div></details></div>
-          <div class="merchant-panel"><div class="merchant-title">🏪 ЛАВКА ТОРГОВЦА <span id="shopStatus">закрыта до 50-го</span></div><p>На карте <b>одна общая лавка</b>: случайно слева или справа напротив середины доски. Подведи <b>любую фигуру, кроме короля</b>, к трём ближайшим клеткам и перетащи её на лавку (или выбери фигуру и нажми лавку). Посетитель сразу подсветится и войдёт в тройку оплаты. Выбери ещё две фигуры. После первой сделки лавка закроется.</p><div id="priceLegend">♟ 1 · ♞ 3 · ♝ 3 · ♜ 5 · 🐷 6 · 🃏 6 · ♛ 9 · 💣 5 · 🚀 12</div></div>
+          <div class="merchant-panel"><div class="merchant-title">🏪 ЛАВКА ТОРГОВЦА <span id="shopStatus">закрыта до 50-го</span></div><p>На карте <b>одна общая лавка</b>: случайно слева или справа напротив середины доски. Подведи <b>любую фигуру, кроме короля</b>, к трём ближайшим клеткам и перетащи её на лавку (или выбери фигуру и нажми лавку). Посетитель сразу подсветится и войдёт в тройку оплаты. Выбери ещё две фигуры. После первой сделки лавка закроется.</p><div id="priceLegend">♟ 1 · ♞ 3 · ♝ 3 · ♜ 5 · 🐷 6 · 🃏 6 · ♛ 9 · 💣 5 · 🚀 12 · Архиепископ 8 · Канцлер 10 · Верблюд 4 · Страж 4 · Пушка 5</div></div>
           <div class="diamond-panel"><div class="diamond-panel-title">💎 РЕДКИЕ БРИЛЛИАНТОВЫЕ ХОДЫ</div><p>После каждого обычного хода движок сравнивает легальные варианты на три полухода вперёд с позиционной оценкой, ответами соперника и тактической фильтрацией. Выдающиеся лучшие тактические решения подсвечиваются голубым и сопровождаются особой фанфарой. Оценка приблизительная: это авторские шахматы 10×10 со случайными правилами.</p></div>
           <div class="rocket-panel"><div class="rocket-panel-title">🚀 РАКЕТА · 12 ОЧКОВ</div><p>Редкая добыча из ящика (2%) или покупка у торговца за 12 очков. Появляется на первой свободной клетке своей половины. Ходит на соседнюю клетку либо взлетает на 3 клетки прямо вперёд. При взрыве уничтожает фигуры на 8 соседних клетках, включая свои, и <b>сама исчезает</b>. Если рядом король — взлёт невозможен.</p><div class="rocket-visual"><img src="/pieces/wt.svg" alt="Белая ракета"><img src="/pieces/bt.svg" alt="Чёрная ракета"></div></div><div class="morph-panel" id="morphPanel">
             <div class="morph-panel-heading"><span>✨ МАГИЯ ПЕШЕК</span><strong>5% ЗА ХОД</strong></div>

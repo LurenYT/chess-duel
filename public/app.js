@@ -9,11 +9,20 @@ function makeGame(fen, rng) {
 
 const $ = (id) => document.getElementById(id);
 const FILES = 'abcdefghij';
-const PIECE_NAME = { p: 'Пешка', n: 'Конь', b: 'Слон', r: 'Ладья', q: 'Ферзь', k: 'Король', s: 'Свинья', u: 'UNO-карта', t: 'Ракета', m: 'Минёр', d:'Шашка', v:'Дамка' };
+const PIECE_NAME = { p: 'Пешка', n: 'Конь', b: 'Слон', r: 'Ладья', q: 'Ферзь', k: 'Король', s: 'Свинья', u: 'UNO-карта', t: 'Ракета', m: 'Минёр', h:'Архиепископ',c:'Канцлер',l:'Верблюд',g:'Страж',a:'Пушка', d:'Шашка', v:'Дамка' };
+const NEW_PIECES={h:['8 очков','Слон + конь: диагонали и прыжок буквой Г.'],c:['10 очков','Ладья + конь: прямые линии и прыжок буквой Г.'],l:['4 очка','Прыгает на 3 клетки в одном направлении и на 1 в сторону, через фигуры.'],g:['4 очка','Шаг на любую соседнюю клетку или прыжок на 2 по вертикали и горизонтали.'],a:['5 очков','Ходит по свободной прямой как ладья. Бьёт только через ровно одну фигуру любого цвета.']};
+for(const [type,[price,rules]] of Object.entries(NEW_PIECES)){
+  const row=document.createElement('article');row.className='army-piece';
+  const image=document.createElement('img');image.src=`/pieces/w${type}.svg`;image.alt=PIECE_NAME[type];
+  const copy=document.createElement('div');
+  const name=document.createElement('strong');name.textContent=`${PIECE_NAME[type]} · ${price}`;
+  const text=document.createElement('p');text.textContent=rules;
+  copy.append(name,text);row.append(image,copy);$('newPiecesList').append(row);
+}
 const PIECE_SYMBOL = { w: '♔', b: '♚' };
 const BUFF_INFO={luck:['Золотая удача','Пешки: 25% шанс магии'],sprint:['Спринт','Двойной ход пешки откуда угодно'],knight:['Стальные кони','Кони ходят и на 1 клетку'],rook:['Рывок ладей','Ладьи ходят на 1 по диагонали'],radar:['Радар','Подсветка опасных клеток']};
 const DEBUFF_INFO={fog:['Туман войны','Не видно вражеских фигур'],tired:['Тяжёлые сапоги','Пешки не могут ходить на 2'],sleepy:['Сонные кони','Нельзя двигать конями'],queen:['Скованная королева','Ферзь ходит только на 1'],pig:['Тишина в хлеву','Свиньи не активируются']};
-const PIECE_COST={p:1,n:3,b:3,r:5,q:9,s:6,u:6,m:5,t:12};
+const PIECE_COST={p:1,n:3,b:3,r:5,q:9,s:6,u:6,m:5,t:12,h:8,c:10,l:4,g:4,a:5};
 const NAME_SUFFIX={w:'белых',b:'чёрных'};
 let socket = null;
 let mode = 'local';
@@ -478,6 +487,7 @@ function renderBoard() {
       button.setAttribute('role', 'gridcell');
       button.dataset.square = square;
       button.setAttribute('aria-label', `${square}, ${fog && piece?.color!==viewerColor ? 'скрыто туманом' : piece ? `${PIECE_NAME[piece.type]} (${piece.color === 'w' ? 'белые' : 'чёрные'})` : 'пусто'}`);
+      button.title=piece&&NEW_PIECES[piece.type]?`${PIECE_NAME[piece.type]}: ${NEW_PIECES[piece.type][1]}`:'';
       if (!fog && last && (square === last.from || square === last.to)) button.classList.add('last-move');
       if(!fog&&last?.brilliant&&(square===last.from||square===last.to))button.classList.add('brilliant-square');
       if(square===tradeVisitor)button.classList.add('shop-visitor-square');

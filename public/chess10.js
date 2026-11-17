@@ -26,7 +26,7 @@
     {id:'queen',label:'Скованная королева',description:'Ферзь противника ограничен одним шагом в любом направлении.'},
     {id:'pig',label:'Тишина в хлеву',description:'Противник не может активировать свиней.'}
   ];
-  const PRICES={p:1,n:3,b:3,r:5,q:9,s:6,u:6,m:5,t:12};
+  const PRICES={p:1,n:3,b:3,r:5,q:9,s:6,u:6,m:5,t:12,h:8,c:10,l:4,g:4,a:5};
   const EFFECTS=[...BUFFS,...DEBUFFS];
   const defaultMeta=(ply=0)=>({ply,crate:-1,shopClosed:false,shopSide:'right',mines:[],effects:{w:[],b:[]}});
   const cloneMeta=m=>({ply:m.ply,crate:m.crate,shopClosed:m.shopClosed,shopSide:m.shopSide||'right',mines:(m.mines||[]).map(x=>({...x})),
@@ -36,12 +36,14 @@
   const isShopVisitor=(i,side)=>shopEntrances(side).some(square=>i===xy(square));
 
   const FILES = 'abcdefghij';
-  const START = '1rnbqkbnr1/pppppppppp/s5um1s/10/10/10/10/S2U3M1S/PPPPPPPPPP/1RNBQKBNR1 w KQkq - 0 1';
+  const START = '1rnbqkbnr1/pppppppppp/slah1cumgs/10/10/10/10/SLAU1HCMGS/PPPPPPPPPP/1RNBQKBNR1 w KQkq - 0 1';
   const KNIGHT = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
   const KING = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
   const DIAG = [[-1,-1],[-1,1],[1,-1],[1,1]];
   const ORTH = [[-1,0],[1,0],[0,-1],[0,1]];
-  const VECTORS = { b: DIAG, r: ORTH, q: [...DIAG,...ORTH], s: [...DIAG,...ORTH] };
+  const CAMEL = [[-3,-1],[-3,1],[-1,-3],[-1,3],[1,-3],[1,3],[3,-1],[3,1]];
+  const LEAPS = {h:KNIGHT,c:KNIGHT,l:CAMEL,g:[...KING,...ORTH.map(([r,c])=>[r*2,c*2])]};
+  const VECTORS = { b: DIAG, r: ORTH, q: [...DIAG,...ORTH], s: [...DIAG,...ORTH],h:DIAG,c:ORTH };
   const inside = (r,c) => r>=0 && r<SIZE && c>=0 && c<SIZE;
   const idx = (r,c) => r*SIZE+c;
   const color = (p) => p === '.' || !p ? null : p === p.toUpperCase() ? 'w' : 'b';
@@ -59,7 +61,7 @@
     if (rows.length !== SIZE) throw Error('Нужны 10 рядов');
     const board = [];
     for (const row of rows) {
-      const tokens = row.match(/10|[1-9]|[prnbqksutmPRNBQKSUTM]/g);
+      const tokens = row.match(/10|[1-9]|[prnbqksutmhclgaPRNBQKSUTMHCLGA]/g);
       if (!tokens || tokens.join('') !== row) throw Error('Недопустимый символ фигуры');
       const cells = [];
       for (const t of tokens) if (/^\d+$/.test(t)) cells.push(...Array(Number(t)).fill('.')); else cells.push(t);
@@ -75,7 +77,7 @@
     // Optional 7th field is variant metadata. Regular 6-field positions remain valid.
     if(parts[6] && parts[6] !== '-') {
       for(const token of parts[6].split(';')) {
-        const match=/^([wb]):([prnbqstm]):([1-5]):([a-j](?:10|[1-9])):([wb])$/.exec(token);
+        const match=/^([wb]):([prnbqstmhclga]):([1-5]):([a-j](?:10|[1-9])):([wb])$/.exec(token);
         if(!match || rental[match?.[1]])throw Error('Неверные данные временного перекрашивания');
         const owner=match[1], type=match[2], remaining=Number(match[3]), square=xy(match[4]), original=match[5];
         if(original===owner || board[square] !== (owner==='w'?type.toUpperCase():type))
@@ -173,10 +175,20 @@
       } else if(t==='m'){
         // A miner cannot capture or threaten a king; only planted mines hurt pieces.
         continue;
+      } else if(t==='a') {
+        // A cannon attacks across exactly one intervening piece of either color.
+        if(tr!==r && tc!==c)continue;
+        const dr=Math.sign(tr-r),dc=Math.sign(tc-c);
+        if(!dr&&!dc)continue;
+        let screens=0;
+        for(let nr=r+dr,nc=c+dc;nr!==tr||nc!==tc;nr+=dr,nc+=dc)
+          if(s.board[idx(nr,nc)]!=='.')screens++;
+        if(screens===1)return true;
       } else if (t==='n' || t==='k' || t==='t') {
         const dirs=t==='k'||t==='t'?KING:hasEffect(s,by,'knight')?[...KNIGHT,...KING]:KNIGHT;
         if (dirs.some(([dr,dc])=>tr===r+dr&&tc===c+dc)) return true;
       } else {
+        if(LEAPS[t]?.some(([dr,dc])=>tr===r+dr&&tc===c+dc))return true;
         const diagonals=t==='r' && hasEffect(s,by,'rook')?DIAG:[];
         for (const [dr,dc] of [...(VECTORS[t]||[]),...diagonals]) {
           let nr=r+dr,nc=c+dc;
@@ -366,6 +378,21 @@
             at(s.board,landingRow+dr,c+dc).toLowerCase()!=='k');
           if(blast)push(a,idx(landingRow,c),'L');
         }
+      } else if(p==='a') {
+        for(const [dr,dc] of ORTH){
+          let nr=r+dr,nc=c+dc,screen=false;
+          while(inside(nr,nc)){
+            const b=idx(nr,nc),occupant=s.board[b];
+            if(!screen){
+              if(occupant==='.')push(a,b);
+              else screen=true;
+            }else if(occupant!=='.'){
+              if(color(occupant)!==s.turn)push(a,b,'c');
+              break;
+            }
+            nr+=dr;nc+=dc;
+          }
+        }
       } else if(p==='n'||p==='k') {
         if(p==='n'&&hasEffect(s,s.turn,'sleepy'))continue;
         const vectors=p==='k'?KING:hasEffect(s,s.turn,'knight')?[...KNIGHT,...KING]:KNIGHT;
@@ -388,6 +415,11 @@
                !s.meta.mines.some(m=>m.square===idx(home,c)&&m.owner===opponent)))push(a,idx(home,3),'q');
         }
       } else {
+        for(const [dr,dc] of LEAPS[p]||[]){
+          const nr=r+dr,nc=c+dc;
+          if(inside(nr,nc)&&color(at(s.board,nr,nc))!==s.turn)
+            push(a,idx(nr,nc),at(s.board,nr,nc)!=='.'?'c':'');
+        }
         if(p==='s'&&hasEffect(s,s.turn,'pig'))continue;
         const extra=p==='r'&&hasEffect(s,s.turn,'rook')?DIAG:[];
         for(const [dr,dc] of [...(VECTORS[p]||[]),...extra]) {
@@ -409,7 +441,7 @@
   // Variant-aware, deterministic 2-ply evaluation. Not a tablebase or proof of
   // optimal play: compares legal moves against the strongest *immediate* reply.
   // No RNG is consumed; effects, UNO conversions and pig movement are simulated.
-  const VALUES={p:100,n:330,b:340,r:510,q:920,s:680,u:570,m:450,t:1190,k:0};
+  const VALUES={p:100,n:330,b:340,r:510,q:920,s:680,u:570,m:450,t:1190,h:820,c:1030,l:390,g:440,a:520,k:0};
   // Positional evaluator: material, central control, development, pawn structure,
   // king shelter and the value of controlling open files. All deterministic.
   function boardValue(s,viewer){
@@ -428,9 +460,9 @@
         if(pawns[owner][col]>1)pos-=20;
         const neighbors=(col>0?pawns[owner][col-1]:0)+(col<9?pawns[owner][col+1]:0);
         if(!neighbors)pos-=18;
-      } else if(type==='n'||type==='b'){
+      } else if(['n','b','h','c','l','g'].includes(type)){
         pos=center*8+(row===initialRow?-12:24);minor[owner]++;
-      } else if(type==='r'){
+      } else if(type==='r'||type==='a'){
         pos=center*2+(!pawns[owner][col]?25:0)+(!pawns[enemy(owner)][col]?18:0);
       } else if(type==='q')pos=center*3;
       else if(type==='s'||type==='u'||type==='t'||type==='m')pos=center*4+advance*2;

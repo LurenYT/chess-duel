@@ -3,12 +3,12 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { Chess10, START } = require('../public/chess10.js');
 
-test('10x10 board with 44 pieces, four pigs and two UNO cards, correct colors and orientation', () => {
+test('10x10 board with 54 pieces, five new roles per team and all existing special pieces', () => {
   const g = new Chess10();
   assert.equal(g.fen(), START);
   let count = 0;
   for (const f of 'abcdefghij') for (let r=1;r<=10;r++) if(g.get(f+r))count++;
-  assert.equal(count, 44);
+  assert.equal(count, 54);
   assert.deepEqual(g.get('f1'), {type:'k',color:'w'});
   assert.deepEqual(g.get('e10'), {type:'q',color:'b'});
   assert.deepEqual(g.get('a3'), {type:'s',color:'w'});
@@ -491,7 +491,8 @@ test('diamond move detection: forced queen capture is a uniquely excellent tacti
 });
 
 test('replay picks <= 5 distinct real moments with exactly 3000 ms and matching start/end positions',()=>{
-  const game=new Chess10(undefined,()=>0.99);
+  // Saved games from the previous starting formation remain replayable.
+  const game=new Chess10('1rnbqkbnr1/pppppppppp/s5um1s/10/10/10/10/S2U3M1S/PPPPPPPPPP/1RNBQKBNR1 w KQkq - 0 1',()=>0.99);
   const seq=[['e2','e4'],['e9','e7'],['f2','f4'],['f9','f7'],['b2','b4'],['b9','b7']];
   for(const [from,to] of seq)game.move({from,to});
   const scenes=game.highlights();

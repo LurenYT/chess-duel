@@ -142,6 +142,30 @@ test('online backwards combo commits once, synchronizes its path and prevents a 
   assert.equal((await request(b,'game:move',{from:'h8',to:'g7'})).ok,true);
 });
 
+test('online new army synchronizes a jumping capture, accepts all five shop rewards and rejects forged types',async()=>{
+ const {Chess10}=require('../public/chess10');
+ const white=await client(),black=await client(),created=await request(white,'room:create',{});
+ await request(black,'room:join',{code:created.code});
+ const room=rooms.get(created.code);
+ assert.equal(new Chess10(created.state.fen).get('b3').type,'l');
+ assert.equal(new Chess10(created.state.fen).get('i8').type,'g');
+ room.game=new Chess10('9k/10/5r4/10/10/4L5/10/10/10/K9 w - - 0 1',()=>.99);
+ const synced=new Promise(resolve=>black.on('room:state',s=>{if(s.moves.at(-1)?.type==='l')resolve(s);}));
+ assert.equal((await request(black,'game:move',{from:'e5',to:'f8'})).ok,false);
+ assert.equal((await request(white,'game:move',{from:'e5',to:'f7'})).ok,false);
+ assert.equal((await request(white,'game:move',{from:'e5',to:'f8'})).ok,true);
+ const snapshot=await synced;assert.equal(snapshot.moves.at(-1).captured,'r');
+ assert.equal(new Chess10(snapshot.fen).get('f8').type,'l');
+ const base='9k/10/10/10/9R/10/10/4Q5/4P5/K9 w - - 0 26';
+ for(const type of ['h','c','l','g','a']){
+  room.game=new Chess10(base,()=>.99);room.result=null;
+  assert.equal((await request(white,'game:trade',{visitor:'j6',sacrifice:['j6','e3','e2'],receive:type})).ok,true);
+  assert.equal(room.game.get('j6').type,type);assert.equal(new Chess10(room.game.fen()).get('j6').type,type);
+ }
+ room.game=new Chess10(base,()=>.99);room.result=null;
+ assert.equal((await request(white,'game:trade',{visitor:'j6',sacrifice:['j6','e3','e2'],receive:'z'})).ok,false);
+});
+
 test('seat token allows reconnecting to the same color', async () => {
   const first = await client();
   const created = await request(first, 'room:create', { name: 'Первый' });

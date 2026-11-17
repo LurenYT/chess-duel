@@ -241,7 +241,7 @@ io.on('connection', (socket) => {
     if(!payload || typeof payload.visitor!=='string' ||
        !Array.isArray(payload.sacrifice) || payload.sacrifice.length!==3 ||
        payload.sacrifice.some(x=>typeof x!=='string' || !/^[a-j](10|[1-9])$/.test(x)) ||
-       !/^[pnbrqsutm]$/.test(payload.receive||''))
+       !/^[pnbrqsutmhclga]$/.test(payload.receive||''))
       return reply({ok:false,error:'Неверный формат сделки'});
     commitPlayerMove(socket, reply, game=>game.trade(payload));
   });
