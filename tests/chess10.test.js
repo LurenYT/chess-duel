@@ -35,7 +35,7 @@ test('pig is not controllable by ordinary moves, but random pig move is legal an
 });
 
 test('normal moves, illegal moves and basic notation work on ranks 1–10', () => {
-  const g = new Chess10();
+  const g = new Chess10(undefined, () => 0.99); // This test covers ordinary moves, not random magic.
   assert.throws(()=>g.move({from:'e2',to:'e5'}),/Недопустимый/);
   assert.equal(g.move({from:'e2',to:'e4'}).san,'e4');
   assert.equal(g.move({from:'e9',to:'e7'}).san,'e7');

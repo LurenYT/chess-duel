@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/styles.css">
   <script src="/socket.io/socket.io.js" defer></script>
   <script src="/chess10.js" defer></script>
+  <script src="/draughts.js" defer></script>
   <script type="module" src="/app.js"></script>
 </head>
 <body>
@@ -30,6 +31,7 @@
         </button>
       </div>
 
+      <div class="rules-selector"><label for="rulesMode">Игра</label><select id="rulesMode"><option value="chess10">Авторские шахматы 10×10</option><option value="russian">Русские шашки 8×8</option></select></div>
       <div class="sidebar-section join-section">
         <label class="section-eyebrow" for="roomCode">ЕСТЬ КОД ПРИГЛАШЕНИЯ?</label>
         <div class="join-field">
@@ -89,7 +91,7 @@
             <div class="clock" id="bottomClock">10:00</div>
           </div>
 
-          <div class="board-footnote"><span>✦</span> 🎁 Ящик через каждые 30 полуходов, собери фигурой! 🏪 Одна общая лавка у левого или правого края: приведи фигуру к её стороне и обменяй 3 на 1. ✨ Пешки могут временно превращаться. <span id="orientationLabel">Белые снизу</span></div>
+          <div class="board-footnote"><span id="chessFootnote"><span>✦</span> 🎁 Ящик через каждые 30 полуходов, собери фигурой! 🏪 Одна общая лавка у левого или правого края: приведи фигуру к её стороне и обменяй 3 на 1. ✨ Пешки могут временно превращаться. </span><span id="draughtsFootnote" hidden>Взятие обязательно · Дамка: ♛ на шашке · Одно взятие — и ход соперника. </span><span id="orientationLabel">Белые снизу</span></div>
         </section>
 
         <aside class="match-panel">
@@ -104,6 +106,7 @@
             <p id="statusDescription">Сделайте первый ход, чтобы начать партию.</p>
           </div>
 
+          <div class="draughts-rules" id="draughtsRules" hidden><h3>Русские шашки · 8×8</h3><p>Простая шашка ходит вперёд на одну клетку по диагонали, бьёт вперёд и назад. Дамка ходит и бьёт по всей свободной диагонали.</p><p><b>Взятие обязательно.</b> После одного взятия ход сразу переходит сопернику, даже если той же шашкой можно побить ещё.</p><p>Достигнув последней горизонтали, шашка сразу становится дамкой. Побитая фигура убирается сразу; превращение не даёт дополнительного хода.</p></div>
           <div class="premove-panel" id="premovePanel" hidden>
             <strong>⏳ ПРЕДХОД</strong><p id="premoveInfo">Пока соперник думает, можно подготовить ход своей фигуры.</p>
             <button id="premoveCancel" type="button" disabled>Отменить предход</button>

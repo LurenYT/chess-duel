@@ -7,6 +7,9 @@ const express = require('express');
 const { Server } = require('socket.io');
 const { Chess10 } = require('./public/chess10.js');
 
+const { RussianDraughts } = require('./public/draughts.js');
+const makeGame = variant => variant === 'russian' ? new RussianDraughts() : new Chess10(undefined, secureRandom);
+
 const PORT = Number(process.env.PORT || 3000);
 const INITIAL_TIME = 10 * 60 * 1000;
 const ROOM_TTL = 12 * 60 * 60 * 1000;
@@ -34,12 +37,13 @@ const safeName = (name) => typeof name === 'string'
   ? name.replace(/[<>\u0000-\u001f\u007f]/g, '').trim().slice(0, 18) || 'Игрок'
   : 'Игрок';
 
-function createRoom() {
+function createRoom(variant = 'chess10') {
+  if (!['chess10','russian'].includes(variant)) throw Error('Неизвестный игровой режим');
   if (rooms.size >= MAX_ROOMS) throw new Error('Сейчас слишком много комнат. Попробуйте позже.');
-  const newGame=new Chess10(undefined,secureRandom);
+  const newGame=makeGame(variant);
   newGame.setShopSide(secureRandom()<.5?'left':'right');
   const room = {
-    code: code(), game: newGame, players: { w: null, b: null },
+    code: code(), variant, game: newGame, players: { w: null, b: null },
     started: false, result: null, drawOffer: null, rematch: new Set(),
     clock: { w: INITIAL_TIME, b: INITIAL_TIME, activeAt: null },
     createdAt: Date.now(), updatedAt: Date.now()
@@ -81,7 +85,7 @@ function clockSnapshot(room) {
 function updateResult(room) {
   const game = room.game;
   if (game.isCheckmate()) {
-    room.result = { reason: 'Мат', winner: game.turn() === 'w' ? 'b' : 'w' };
+    room.result = { reason: room.variant==='russian'?'Нет шашек или допустимых ходов':'Мат', winner: game.turn() === 'w' ? 'b' : 'w' };
   } else if (game.isDraw()) {
     const reason = game.isStalemate() ? 'Пат'
       : game.isThreefoldRepetition() ? 'Троекратное повторение'
@@ -98,6 +102,7 @@ function publicRoom(room, viewer=null) {
     ['w','b'].some(c=>effects[c].some(e=>e.id==='fog')));
   return {
     code: room.code,
+    variant: room.variant,
     fog,
     check: room.game.isCheck(),
     fen: fog?room.game.viewFen(viewer):room.game.fen(),
@@ -182,7 +187,7 @@ function withPlayer(socket, fn, reply) {
 io.on('connection', (socket) => {
   socket.on('room:create', (payload = {}, reply = () => {}) => {
     try {
-      const room = createRoom();
+      const room = createRoom(payload.variant);
       reply(enterRoom(socket, room, payload.name, null));
     } catch (error) {
       reply({ ok: false, error: error.message });
@@ -280,7 +285,7 @@ io.on('connection', (socket) => {
       if (!room.result || !ready(room)) return reply({ ok: false, error: 'Реванш доступен только после окончания матча.' });
       room.rematch.add(color);
       if (room.rematch.size === 2) {
-        room.game = new Chess10(undefined, secureRandom);
+        room.game = makeGame(room.variant);
         room.game.setShopSide(secureRandom()<.5?'left':'right');
         room.result = null;
         room.drawOffer = null;

@@ -35,6 +35,53 @@ async function request(socket, name, payload) {
   });
 }
 
+test('Russian online rooms synchronize variant, enforce turns and preserve mode on rematch', async()=>{
+  const w=await client(),b=await client(),s=await client();
+  const made=await request(w,'room:create',{variant:'russian',name:'Белые шашки'});
+  assert.equal(made.ok,true);assert.equal(made.state.variant,'russian');
+  const joined=await request(b,'room:join',{code:made.code,variant:'chess10'});
+  assert.equal(joined.state.variant,'russian');
+  await request(s,'room:join',{code:made.code});
+  assert.equal((await request(s,'game:move',{from:'a3',to:'b4'})).ok,false);
+  assert.equal((await request(b,'game:move',{from:'b6',to:'a5'})).ok,false);
+  assert.equal((await request(w,'game:move',{from:'a3',to:'b4'})).ok,true);
+  assert.equal((await request(b,'game:move',{from:'b6',to:'a5'})).ok,true);
+  const r=rooms.get(made.code);
+  assert.equal(r.game.get('b4').type,'d');assert.equal(r.game.get('a5').color,'b');
+  assert.equal((await request(w,'game:pig',{from:'b4'})).ok,false);
+  assert.equal((await request(w,'game:resign',{})).ok,true);
+  await request(w,'game:rematch',{});await request(b,'game:rematch',{});
+  assert.equal(r.variant,'russian');assert.ok(r.game.fen().startsWith('RD1:'));assert.equal(r.game.ply(),0);
+  assert.equal((await request(w,'room:create',{variant:'invalid'})).ok,false);
+});
+
+test('Russian online capture passes turn and clock, rejects a second capture after reconnect',async()=>{
+  const {RussianDraughts}=require('../public/draughts');
+  const w=await client(),b=await client();
+  const made=await request(w,'room:create',{variant:'russian'});
+  await request(b,'room:join',{code:made.code});
+  const r=rooms.get(made.code);
+  r.game=new RussianDraughts('RD1:'+JSON.stringify({board:{b6:{color:'w',type:'d'},c7:{color:'b',type:'d'},f6:{color:'b',type:'d'}},turn:'w',chain:null,taken:[],ply:0,quiet:0,repetitions:{}}));
+  const states=[];b.on('room:state',state=>states.push(state));
+  assert.equal((await request(w,'game:move',{from:'b6',to:'d8'})).ok,true);
+  assert.equal(r.game.turn(),'b');assert.equal(r.result,null);assert.equal(r.game.continuation(),null);
+  assert.notEqual(r.clock.activeAt,null);
+  assert.equal((await request(w,'game:move',{from:'d8',to:'e7'})).ok,false);
+  const reload=await client();
+  const recovered=await request(reload,'room:join',{code:made.code,token:made.token});
+  const restored=new RussianDraughts(recovered.state.fen);
+  assert.equal(restored.continuation(),null);assert.equal(restored.get('d8').type,'v');
+  assert.equal(restored.turn(),'b');assert.deepEqual(restored.pendingCaptures(),[]);
+  assert.equal((await request(w,'game:move',{from:'d8',to:'h4'})).ok,false);
+  assert.equal((await request(reload,'game:move',{from:'d8',to:'h4'})).ok,false);
+  assert.equal(r.game.get('c7'),null);assert.equal(r.game.get('f6').color,'b');
+  assert.equal(states.at(-1).variant,'russian');assert.equal(states.at(-1).turn,'b');
+  assert.equal((await request(b,'game:move',{from:'f6',to:'g5'})).ok,true);
+  assert.equal(r.game.turn(),'w');assert.equal(r.result,null);
+  assert.equal((await request(reload,'game:move',{from:'d8',to:'h4'})).ok,true);
+  assert.equal(r.result.winner,'w');assert.equal(r.result.reason,'Нет шашек или допустимых ходов');
+});
+
 test('online match: join, legal move, validation, turn and resign', async () => {
   const white = await client();
   const black = await client();
@@ -60,8 +107,8 @@ test('online match: join, legal move, validation, turn and resign', async () => 
   assert.equal((await request(white, 'game:move', { from: 'e2', to: 'e4' })).ok, true);
   assert.equal(rooms.get(made.code).game.turn(), 'b');
   assert.equal((await request(white, 'game:move', { from: 'd2', to: 'd4' })).ok, false);
-  assert.equal((await request(black, 'game:move', { from: 'e7', to: 'e5' })).ok, true);
-  assert.deepEqual(rooms.get(made.code).game.history(), ['e4', 'e5']);
+  assert.equal((await request(black, 'game:move', { from: 'e9', to: 'e7' })).ok, true);
+  assert.deepEqual(rooms.get(made.code).game.history({verbose:true}).map(m=>[m.from,m.to]), [['e2','e4'], ['e9','e7']]);
 
   assert.equal((await request(white, 'game:resign', {})).ok, true);
   assert.equal(rooms.get(made.code).result.winner, 'b');
@@ -135,7 +182,8 @@ test('online UNO conversion: server validates move and stores changed color for 
   assert.equal((await request(white,'game:move',{from:'f6',to:'g4'})).ok,true);
   assert.equal(room.game.rentals().w.remaining,4);
   assert.equal(room.game.rentals().w.square,'g4');
-  assert.equal((await request(black,'game:drop',{to:'g7'})).ok,false);
+  // There is no game:drop handler; test the supported move endpoint instead.
+  assert.equal((await request(black,'game:move',{from:'g7',to:'g6'})).ok,false);
 });
 
 test('online 5% pawn mutation is authoritative and synchronized to both clients', async () => {

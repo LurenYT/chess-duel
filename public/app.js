@@ -1,9 +1,15 @@
 // Rules shared with the server (loaded by index.html).
-const { Chess10 } = window;
+const { Chess10, RussianDraughts } = window;
+let rulesVariant = 'chess10';
+function isDraughts() { return (mode==='online' ? room?.variant : rulesVariant)==='russian'; }
+function makeGame(fen, rng) {
+  return typeof fen==='string' && fen.startsWith('RD1:') ? new RussianDraughts(fen)
+    : fen === undefined && isDraughts() ? new RussianDraughts() : new Chess10(fen,rng);
+}
 
 const $ = (id) => document.getElementById(id);
 const FILES = 'abcdefghij';
-const PIECE_NAME = { p: 'Пешка', n: 'Конь', b: 'Слон', r: 'Ладья', q: 'Ферзь', k: 'Король', s: 'Свинья', u: 'UNO-карта', t: 'Ракета', m: 'Минёр' };
+const PIECE_NAME = { p: 'Пешка', n: 'Конь', b: 'Слон', r: 'Ладья', q: 'Ферзь', k: 'Король', s: 'Свинья', u: 'UNO-карта', t: 'Ракета', m: 'Минёр', d:'Шашка', v:'Дамка' };
 const PIECE_SYMBOL = { w: '♔', b: '♚' };
 const BUFF_INFO={luck:['Золотая удача','Пешки: 25% шанс магии'],sprint:['Спринт','Двойной ход пешки откуда угодно'],knight:['Стальные кони','Кони ходят и на 1 клетку'],rook:['Рывок ладей','Ладьи ходят на 1 по диагонали'],radar:['Радар','Подсветка опасных клеток']};
 const DEBUFF_INFO={fog:['Туман войны','Не видно вражеских фигур'],tired:['Тяжёлые сапоги','Пешки не могут ходить на 2'],sleepy:['Сонные кони','Нельзя двигать конями'],queen:['Скованная королева','Ферзь ходит только на 1'],pig:['Тишина в хлеву','Свиньи не активируются']};
@@ -62,7 +68,7 @@ function game() {
   if(pendingOnline?.preview)return pendingOnline.preview;
   if(!onlineCache.game || onlineCache.fen!==room?.fen){
     onlineCache.fen=room?.fen;
-    onlineCache.game=new Chess10(room?.fen);
+    onlineCache.game=makeGame(room?.fen);
   }
   return onlineCache.game;
 }
@@ -78,7 +84,7 @@ function canMove() {
 }
 
 function canPremove(){
-  return mode==='online' && !pigBusy && !pendingOnline && !isGameFinished() &&
+  return !isDraughts() && mode==='online' && !pigBusy && !pendingOnline && !isGameFinished() &&
     room?.ready && room.started && socket?.connected && ['w','b'].includes(role) && room.turn!==role;
 }
 function canInteract(){return canMove()||canPremove();}
@@ -106,11 +112,11 @@ function flushPremove(){
   // Do not trust the old highlights, validate against updated game state.
   try{
     if(move.pig){
-      if(new Chess10(room.fen).get(move.from)?.type!=='s')return toast('Свинья больше не находится на выбранной клетке.');
+      if(makeGame(room.fen).get(move.from)?.type!=='s')return toast('Свинья больше не находится на выбранной клетке.');
       socket.emit('game:pig',{from:move.from},reply=>{if(!reply?.ok)toast(reply?.error||'Свинья не может пойти.');});
       render();return;
     }
-    const allowed=new Chess10(room.fen).moves({square:move.from,verbose:true}).some(m=>m.to===move.to &&
+    const allowed=makeGame(room.fen).moves({square:move.from,verbose:true}).some(m=>m.to===move.to &&
       (m.promotion||null)===(move.promotion||null));
     if(!allowed){render();return toast('Предход отменён: после хода соперника он стал невозможен.');}
   }catch{render();return toast('Не удалось проверить предход.');}
@@ -165,7 +171,7 @@ function trySquare(square) {
     if(!pre&&fogActive()&&game().get(selected)?.type==='p'&&square.endsWith(active==='w'?'10':'1')){
       return showPromotion(['q','r','b','n'].map(promotion=>({...candidates[0],promotion})));
     }
-    if(candidates.length>1&&candidates.some(move=>move.promotion)){
+    if(!isDraughts()&&candidates.length>1&&candidates.some(move=>move.promotion)){
       promotionOptions=candidates;showPromotion(candidates);return;
     }
     if(candidates.length===1){
@@ -215,9 +221,9 @@ function submitMove(move) {
   if (!socket?.connected) return toast('Нет соединения с сервером.');
   // Send first, then render a deterministic visual projection without waiting
   // for a network round trip. No client RNG is ever trusted by the server.
-  if(!room?.fog && new Chess10(room.fen).crate()!==payload.to){
+  if(!room?.fog && makeGame(room.fen).crate()!==payload.to){
     try{
-      const projection=new Chess10(room.fen,()=>.97); // Avoid inventing a rare loot event.
+      const projection=makeGame(room.fen,()=>.97); // Avoid inventing a rare loot event.
       projection.move(payload);
       pendingOnline={preview:projection,ply:room.moves.length,from:payload.from,to:payload.to};
     }catch{pendingOnline={preview:null,ply:room.moves.length};}
@@ -415,7 +421,11 @@ function renderBoard() {
   if (mode === 'online' && !room) return;
   const current = game();
   const board = $('board');
-  const useExisting = board.children.length === 100 && board.dataset.flip === String(mode === 'online' && role === 'b');
+  const size=isDraughts()?8:10;
+  board.style.gridTemplateColumns=`repeat(${size},minmax(0,1fr))`;
+  board.style.gridTemplateRows=`repeat(${size},minmax(0,1fr))`;
+  board.setAttribute('aria-label',isDraughts()?'Доска русских шашек 8 на 8':'Шахматная доска 10 на 10');
+  const useExisting = board.children.length === size*size && board.dataset.flip === String(mode === 'online' && role === 'b');
   const reversed = mode === 'online' && role === 'b';
   const last = mode === 'local'
     ? localGame.history({ verbose: true }).at(-1)
@@ -432,14 +442,14 @@ function renderBoard() {
   const targetSquares = new Set(legalMoves.map((move) => move.to));
   const fragment = document.createDocumentFragment();
 
-  for (let row = 0; row < 10; row++) {
-    for (let col = 0; col < 10; col++) {
-      const file = reversed ? FILES[9 - col] : FILES[col];
-      const rank = reversed ? row + 1 : 10 - row;
+  for (let row = 0; row < size; row++) {
+    for (let col = 0; col < size; col++) {
+      const file = reversed ? FILES[size-1 - col] : FILES[col];
+      const rank = reversed ? row + 1 : size - row;
       const square = `${file}${rank}`;
       const piece = current.get(square);
       const light = (FILES.indexOf(file) + rank) % 2 === 0;
-      const button = useExisting ? board.children[row*10+col] : document.createElement('button');
+      const button = useExisting ? board.children[row*size+col] : document.createElement('button');
       if(useExisting){
         // Reuse the 100 existing square elements instead of recreating the
         // entire grid each click/network update; preserve the piece image when
@@ -450,6 +460,7 @@ function renderBoard() {
       }
       button.type = 'button';
       button.className = `square ${light ? 'light' : 'dark'}`;
+      if(current.pendingCaptures?.().includes(square)) button.classList.add('pending-capture');
       button.setAttribute('role', 'gridcell');
       button.dataset.square = square;
       button.setAttribute('aria-label', `${square}, ${fog && piece?.color!==viewerColor ? 'скрыто туманом' : piece ? `${PIECE_NAME[piece.type]} (${piece.color === 'w' ? 'белые' : 'чёрные'})` : 'пусто'}`);
@@ -491,7 +502,7 @@ function renderBoard() {
       if (targetSquares.has(square)){
         const rocketTarget=legalMoves.some(m=>m.to===square && m.flags.includes('L'));
         const mineTarget=legalMoves.some(m=>m.to===square && m.flags.includes('M'));
-        button.classList.add(mineTarget?'mine-target':rocketTarget?'rocket-target':piece?'can-capture':'can-move');
+        button.classList.add(mineTarget?'mine-target':rocketTarget?'rocket-target':piece||legalMoves.some(m=>m.to===square&&m.captured)?'can-capture':'can-move');
       }
       const mine=current.mines().find(x=>x.square===square);
       if(mine && !(fog&&mine.owner!==viewerColor)){
@@ -535,7 +546,7 @@ function renderBoard() {
         label.textContent = rank;
         button.append(label);
       }
-      if (row === 9 && !useExisting) {
+      if (row === size-1 && !useExisting) {
         const label = document.createElement('span');
         label.className = 'square-label file';
         label.textContent = file;
@@ -593,6 +604,12 @@ function renderPlayers() {
 }
 
 function statusInfo() {
+  if(isDraughts() && !(mode==='online' && (!socket?.connected || !room?.started || !room?.ready || room?.result))) {
+    const g=game();
+    if(mode==='local' && g.isGameOver()) return ['ПАРТИЯ ОКОНЧЕНА',g.isDraw()?'Ничья':`${g.turn()==='w'?'Чёрные':'Белые'} победили`,g.isDraw()?'Троекратное повторение или 15 ходов каждой стороны дамками без взятия.':'У соперника нет шашек или допустимых ходов.','finished'];
+    const capture=g.moves({verbose:true}).some(m=>m.captured);
+    return ['РУССКИЕ ШАШКИ',`Ход ${g.turn()==='w'?'белых':'чёрных'}`,capture?'Есть обязательное взятие. После него ход перейдёт сопернику.':'Выберите свою шашку и клетку назначения.','playing'];
+  }
   if (mode === 'online') {
     if (!socket?.connected) return ['СОЕДИНЕНИЕ ПОТЕРЯНО', 'Нет связи с сервером', 'Переподключение произойдёт автоматически.', 'waiting'];
     if (room.result) {
@@ -620,6 +637,15 @@ function renderMoves() {
   const moves = mode === 'local' ? localGame.history({ verbose: true }) : (room?.moves || []);
   $('moveCounter').textContent = `${moves.length} ${moves.length === 1 ? 'ХОД' : 'ХОДОВ'}`;
   const container = $('movesArea');
+  if(isDraughts() && moves.length) {
+    container.replaceChildren();
+    for(const m of moves) {
+      const row=document.createElement('div'); row.className='draughts-move';
+      row.textContent=`${m.turnNumber}. ${m.color==='w'?'Белые':'Чёрные'}: ${m.san}${m.continued?' →':''}`;
+      container.append(row);
+    }
+    container.scrollTop=container.scrollHeight;return;
+  }
   if (!moves.length) {
     container.innerHTML = '<div class="empty-moves"><span>♙</span><p>Здесь появятся ходы<br>вашей партии</p></div>';
     return;
@@ -649,7 +675,7 @@ function renderMoves() {
 }
 
 function render() {
-  $('premovePanel').hidden=!(mode==='online'&&['w','b'].includes(role));
+  $('premovePanel').hidden=!(!isDraughts()&&mode==='online'&&['w','b'].includes(role));
   $('premoveInfo').textContent=premove?(premove.pig?`⏳ Предход свиньи: ${premove.from} → случайная клетка`:`⏳ Предход: ${premove.from} → ${premove.to}`):canPremove()?'Ход противника: выбери свою фигуру и клетку для предхода.':'Предход можно задать во время хода соперника.';
   $('premoveCancel').disabled=!premove;
   if (mode === 'online' && !room) return;
@@ -658,7 +684,12 @@ function render() {
   $('connectionLabel').textContent = mode === 'local' ? 'Локальная игра'
     : socket?.connected ? `Онлайн · ${role === 'spectator' ? 'наблюдатель' : 'подключено'}` : 'Нет соединения';
   $('gameModeLabel').textContent = mode === 'local' ? 'ЛОКАЛЬНАЯ ПАРТИЯ' : `ОНЛАЙН · КОМНАТА ${room.code}`;
-  $('roomPill').innerHTML = mode === 'local' ? '10×10 <span>·</span> без часов' : '10×10 <span>·</span> 10 минут';
+  $('roomPill').textContent = `${isDraughts()?'Русские шашки · 8×8':'Шахматы · 10×10'} · ${mode==='local'?'без часов':'10 минут'}`;
+  document.body.classList.toggle('draughts-mode',isDraughts());
+  $('rulesMode').value=isDraughts()?'russian':'chess10';
+  $('draughtsRules').hidden=!isDraughts();
+  $('chessFootnote').hidden=isDraughts();
+  $('draughtsFootnote').hidden=!isDraughts();
   $('inviteBlock').hidden = mode !== 'online';
   if (room) $('activeRoomCode').textContent = room.code;
   const [tag, title, description, phase] = statusInfo();
@@ -713,7 +744,7 @@ function startLocal() {
   mode = 'local';
   role = 'w';
   room = null;
-  localGame = new Chess10();localGame.setShopSide(Math.random()<.5?'left':'right');
+  localGame = makeGame();localGame.setShopSide(Math.random()<.5?'left':'right');
   pendingOnline=null;premove=null;onlineCache.fen=null;onlineCache.game=null;
   closeReplay();replayAutoKey=null;bgMusic.pause();bgMusic.currentTime=0;
   pigBusy = false;
@@ -737,7 +768,7 @@ function ensureConnected() {
 
 function createRoom() {
   if (!ensureConnected()) return;
-  socket.timeout(9000).emit('room:create', { name: $('playerName').value }, (error, reply) => {
+  socket.timeout(9000).emit('room:create', { name: $('playerName').value, variant: isDraughts()?'russian':'chess10' }, (error, reply) => {
     if (error) return toast('Сервер не отвечает. Попробуйте снова.');
     setRoom(reply);
   });
@@ -894,7 +925,7 @@ function floatingSymbol(text, square) {
 
 function captureEffect(record) {
   if (!record.captured) return;
-  const victimSquare = record.flags?.includes('e') ? record.to[0] + record.from.slice(1) : record.to;
+  const victimSquare = record.capturedSquare || (record.flags?.includes('e') ? record.to[0] + record.from.slice(1) : record.to);
   const cell = boardSquare(victimSquare);
   if (!cell) return;
   const rect = cell.getBoundingClientRect();
@@ -1204,7 +1235,15 @@ $('soundBtn').addEventListener('click', () => {
 });
 updateSoundButton();
 
-$('localBtn').addEventListener('click', startLocal);
+$('rulesMode').addEventListener('change',()=>{
+  const next=$('rulesMode').value;
+  const change=()=>{rulesVariant=next;startLocal();};
+  if(mode==='online'||localGame.history().length) {
+    $('rulesMode').value=isDraughts()?'russian':'chess10';
+    askConfirm('Начать другую игру?', 'Текущая партия будет закрыта на этом устройстве. Начать новую локальную партию в выбранном режиме?',change);
+  } else change();
+});
+$('localBtn').addEventListener('click', ()=>{rulesVariant=isDraughts()?'russian':'chess10';startLocal();});
 $('resetBtn').addEventListener('click', startLocal);
 $('createBtn').addEventListener('click', createRoom);
 $('promoCreateBtn').addEventListener('click', createRoom);
@@ -1281,9 +1320,11 @@ function scheduleReplay(gameOver,highlights){
   },1450);
 }
 function replayDraw(fen,record=null,after=false){
-  const board=$('replayBoard'),state=new Chess10(fen);
+  const board=$('replayBoard'),state=makeGame(fen),size=fen.startsWith('RD1:')?8:10;
+  board.style.gridTemplateColumns=`repeat(${size},minmax(0,1fr))`;
+  board.setAttribute('aria-label',`Повтор доски ${size} на ${size}`);
   const fragment=document.createDocumentFragment();
-  for(let rank=10;rank>=1;rank--)for(const file of FILES){
+  for(let rank=size;rank>=1;rank--)for(const file of FILES.slice(0,size)){
     const square=`${file}${rank}`,piece=state.get(square);
     const el=document.createElement('div');el.className=`replay-cell ${(FILES.indexOf(file)+rank)%2===0?'light':'dark'}`;
     el.dataset.square=square;
